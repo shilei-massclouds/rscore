@@ -4,10 +4,4 @@
  * at https://opensource.org/licenses/MIT
  */
 
-#![no_std]
-#![no_main]
-#![feature(naked_functions, asm_sym, asm_const)]
-#![feature(default_alloc_error_handler)]
-
-mod lang;
-mod kernel;
+const KERNEL_BASE: usize = 0xffff_ffff_0000_0000;

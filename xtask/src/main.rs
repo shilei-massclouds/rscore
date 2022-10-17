@@ -74,6 +74,19 @@ fn build_kernel() {
     }
 }
 
+fn to_binary() {
+    let status = Command::new("riscv64-linux-gnu-objcopy")
+        .args(["-O", "binary"])
+        .arg("-S")
+        .arg("target/riscv64/release/kernel")
+        .arg("target/riscv64/release/kernel.bin")
+        .status().unwrap();
+
+    if !status.success() {
+        panic!("Err: {}", status.code().unwrap());
+    }
+}
+
 fn main() {
     /* Check config.ini updated? */
     if (timestamp(GENERATED_LD) < timestamp(KERNEL_CONFIG)) ||
@@ -92,4 +105,5 @@ fn main() {
 
     /* Build kernel */
     build_kernel();
+    to_binary();
 }

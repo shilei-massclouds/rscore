@@ -13,7 +13,7 @@ use super::csr::*;
  */
 #[naked]
 #[no_mangle]
-#[link_section = ".text.entry"]
+#[link_section = ".head.text"]
 unsafe extern "C"
 fn _start(hartid: usize, device_tree_paddr: usize) -> ! {
     asm!(

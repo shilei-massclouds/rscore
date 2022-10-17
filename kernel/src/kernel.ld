@@ -7,7 +7,7 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-INCLUDE kernel_vars.generated.ld
+INCLUDE config.generated.ld
 
 SECTIONS
 {

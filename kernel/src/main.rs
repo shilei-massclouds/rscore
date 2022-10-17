@@ -10,4 +10,4 @@
 #![feature(default_alloc_error_handler)]
 
 mod lang;
-mod kernel;
+mod arch;

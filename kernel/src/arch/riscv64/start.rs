@@ -17,7 +17,7 @@ use crate::config_generated::*;
 #[no_mangle]
 #[link_section = ".head.text"]
 unsafe extern "C"
-fn _start(hartid: usize, device_tree_paddr: usize) -> ! {
+fn _start(hartid: usize, dtb_pa: usize) -> ! {
     asm!(
         "j {start_kernel}",
         start_kernel = sym start_kernel,
@@ -27,24 +27,20 @@ fn _start(hartid: usize, device_tree_paddr: usize) -> ! {
 
 unsafe extern "C"
 fn start_kernel(hartid: usize) {
-    prepare();
+    prepare(hartid);
 
     /*
      * Since early OpenSBI(version < v0.7) has no HSM extension,
      * a lottery system is required: secondary harts spinwait for
      * the unique winner to finish most jobs.
      */
-    if hartid >= _CONFIG_NR_CPUS {
-        return secondary_park();
-    }
-
     if crate::HART_LOTTERY.fetch_add(1, Ordering::Relaxed) != 0 {
         return secondary_park();
     }
 }
 
 unsafe extern "C"
-fn prepare() {
+fn prepare(hartid: usize) {
     asm!(
         /* Mask all interrupts */
         "csrw sie, zero
@@ -62,9 +58,24 @@ fn prepare() {
          */
         "li t0, {SR_FS}
          csrc sstatus, t0",
+    
+        /* Save hart ID and DTB physical address */
+        "la a2, {BOOT_HARTID}
+         sd a0, (a2)
+         la a2, {DTB_PA}
+         sd a1, (a2)",
 
         SR_FS = const SR_FS,
-    )
+        BOOT_HARTID = sym crate::BOOT_HARTID,
+        DTB_PA = sym crate::DTB_PA,
+    );
+
+    if hartid >= _CONFIG_NR_CPUS {
+        return secondary_park();
+    }
+
+    /* From now on, don't use hartid(a0) and dtb_pa(a1) again!
+     * Some crates may clobber a0 or a1 unexpectedly */
 }
 
 unsafe extern "C"

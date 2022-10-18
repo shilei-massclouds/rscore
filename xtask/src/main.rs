@@ -5,8 +5,8 @@ use std::process::Command;
 use filetime::FileTime;
 
 const KERNEL_CONFIG: &str = "kernel/config.ini";
-const GENERATED_LD: &str = "kernel/src/kernel.generated.ld";
-const GENERATED_RS: &str = "kernel/src/config.generated.rs";
+const GENERATED_LD: &str = "kernel/src/kernel_generated.ld";
+const GENERATED_RS: &str = "kernel/src/config_generated.rs";
 
 fn timestamp(f: &str) -> FileTime {
     let metadata = std::fs::metadata(f);
@@ -41,11 +41,12 @@ fn prepare_params() {
             };
 
             let t = match ret {
-                Ok(_) => "u64",
+                Ok(_) => "usize",
                 _ => "&str",
             };
 
-            writeln!(&mut f_rs, "const {}: {} = {};", k, t, v).unwrap();
+            writeln!(&mut f_rs,
+                     "pub const _{}: {} = {};", k, t, v).unwrap();
         }
     }
 }
@@ -106,4 +107,5 @@ fn main() {
     /* Build kernel */
     build_kernel();
     to_binary();
+    println!("build kernel okay!");
 }

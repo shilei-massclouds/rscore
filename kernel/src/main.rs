@@ -11,3 +11,8 @@
 
 mod lang;
 mod arch;
+mod config_generated;
+
+use core::sync::atomic::AtomicI32;
+
+static HART_LOTTERY: AtomicI32 = AtomicI32::new(0);

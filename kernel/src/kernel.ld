@@ -7,11 +7,11 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
-INCLUDE kernel.generated.ld
+INCLUDE kernel_generated.ld
 
 SECTIONS
 {
-    . = KERNEL_BASE;
+    . = CONFIG_KERNEL_BASE;
     __code_start = .;
 
     .head.text : {
@@ -36,7 +36,7 @@ SECTIONS
                ".init_array overalignment -> maybe padding gaps");
     }
 
-    .rodata ALIGN(4K) : {
+    .rodata : {
         *(.rodata) *(.rodata.*)
     }
     .srodata : {
@@ -56,7 +56,7 @@ SECTIONS
 
     PROVIDE_HIDDEN(__data_end = .);
 
-    .bss ALIGN(4K) : {
+    .bss : ALIGN(CONSTANT(MAXPAGESIZE)) {
         PROVIDE_HIDDEN(__bss_start = .);
 
         bootstack = .;
@@ -64,11 +64,9 @@ SECTIONS
         bootstacktop = .;
 
         . = ALIGN(4K);
-        sbss = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
         *(COMMON)
-        ebss = .;
     }
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));

@@ -59,9 +59,8 @@ SECTIONS
     .bss : ALIGN(CONSTANT(MAXPAGESIZE)) {
         PROVIDE_HIDDEN(__bss_start = .);
 
-        bootstack = .;
-        *(.bss.bootstack)
-        bootstacktop = .;
+        . = ALIGN(4K);
+        *(.bss..page_aligned)
 
         . = ALIGN(4K);
         *(.bss .bss.*)

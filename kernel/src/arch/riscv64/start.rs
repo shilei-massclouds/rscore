@@ -37,6 +37,16 @@ fn start_kernel(hartid: usize) {
     if crate::HART_LOTTERY.fetch_add(1, Ordering::Relaxed) != 0 {
         return secondary_park();
     }
+
+    /* Clear BSS */
+    extern "C" {
+        static mut __bss_start: u64;
+        static mut _end: u64;
+    }
+    r0::zero_bss(&mut __bss_start, &mut _end);
+
+    /* Setup stack for boot hart */
+    setup_boot_stack();
 }
 
 unsafe extern "C"
@@ -76,6 +86,21 @@ fn prepare(hartid: usize) {
 
     /* From now on, don't use hartid(a0) and dtb_pa(a1) again!
      * Some crates may clobber a0 or a1 unexpectedly */
+}
+
+unsafe extern "C"
+fn setup_boot_stack() {
+    #[link_section = ".bss..page_aligned"]
+    static mut BOOT_STACK: [u8; _CONFIG_STACK_SIZE]
+        = [0u8; _CONFIG_STACK_SIZE];
+
+    asm! (
+        "li t0, {stack_size}
+         la sp, {boot_stack}
+         add sp, sp, t0",
+        stack_size = const _CONFIG_STACK_SIZE,
+        boot_stack = sym BOOT_STACK,
+    )
 }
 
 unsafe extern "C"

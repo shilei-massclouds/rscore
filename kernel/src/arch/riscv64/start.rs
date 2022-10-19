@@ -57,7 +57,8 @@ fn start_kernel(hartid: usize) {
     /* Map a large run of physical memory
      * at the base of the kernel's address space */
     mmu::riscv64_boot_map(&mut bootalloc, &(mmu::SWAPPER_PG_DIR),
-                          KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE);
+                          KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE,
+                          0);
 }
 
 unsafe extern "C"

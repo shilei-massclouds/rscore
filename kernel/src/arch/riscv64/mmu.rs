@@ -42,9 +42,47 @@ impl PageTable {
 static TRAMPOLINE_PG_DIR: PageTable = PageTable::ZERO;
 pub static SWAPPER_PG_DIR: PageTable = PageTable::ZERO;
 
+macro_rules! MMU_LX_X {
+    ($page_shift: expr, $level: expr) => {
+        ((4 - ($level)) * (($page_shift) - 3) + 3)
+    }
+}
+
+fn vaddr_to_index(addr: usize, level: usize) -> usize {
+    (addr >> MMU_LX_X!(PAGE_SHIFT, level)) & (PAGE_TABLE_ENTRIES - 1)
+}
+
+fn _boot_map<F0, F1>(table0: &PageTable,
+                     vaddr: usize, paddr: usize, len: usize,
+                     exflag: usize,
+                     alloc_func: F0, phys_to_virt: F1)
+where F0: FnMut() -> usize,
+      F1: Fn(usize) -> usize
+{
+    /* Loop through the virtual range and map each physical page,
+     * using the largest page size supported.
+     * Allocates necessar page tables along the way. */
+    let mut off = 0;
+    while (off < len) {
+        /* make sure the level 1 pointer is valid */
+        let index0 = vaddr_to_index(vaddr + off, 0);
+        if table0.item_leaf(index0) {
+            // not legal as a leaf at this level
+            return ZX_ERR_BAD_STATE;
+        }
+        if !table0.item_valid(index0) {
+            let pa: usize = alloc_func();
+            table0.mk_item(pa, PAGE_KERNEL|exflag);
+        }
+
+        let table1 = table0.next_level(index0);
+    }
+}
+
 pub fn riscv64_boot_map(bootalloc: &mut BootAlloc,
                         table: &PageTable,
-                        vaddr: usize, paddr: usize, len: usize) {
+                        vaddr: usize, paddr: usize, len: usize,
+                        exflag: usize) {
     /* The following helper routines assume that code is running
      * in physical addressing mode (mmu off).
      * Any physical addresses calculated are assumed to be
@@ -52,13 +90,10 @@ pub fn riscv64_boot_map(bootalloc: &mut BootAlloc,
     let alloc = || {
         /* allocate a page out of the boot allocator,
          * asking for a physical address */
-        let pa = bootalloc.alloc_page_phys();
-
-        let ptr = pa as *mut PageTable;
-        ptr
+        bootalloc.alloc_page_phys()
     };
 
     let phys_to_virt = |pa: usize| { pa };
 
-    _boot_map(table, vaddr, paddr, len, flags, alloc, phys_to_virt);
+    _boot_map(table, vaddr, paddr, len, exflag, alloc, phys_to_virt);
 }

@@ -7,6 +7,8 @@
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 use super::csr::*;
+use super::defines::*;
+use super::mmu;
 use crate::vm::bootalloc::*;
 use crate::config_generated::*;
 
@@ -50,7 +52,12 @@ fn start_kernel(hartid: usize) {
     setup_boot_stack();
 
     /* The boot allocator only works in the early stage */
-    let bootalloc = BootAlloc::new();
+    let mut bootalloc = BootAlloc::new();
+
+    /* Map a large run of physical memory
+     * at the base of the kernel's address space */
+    mmu::riscv64_boot_map(&mut bootalloc, &(mmu::SWAPPER_PG_DIR),
+                          KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE);
 }
 
 unsafe extern "C"

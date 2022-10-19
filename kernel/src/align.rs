@@ -13,3 +13,8 @@ macro_rules! ROUNDUP {
 macro_rules! ALIGN {
     ($a: expr, $b: expr) => {ROUNDUP!($a, $b)}
 }
+
+#[macro_export]
+macro_rules! PAGE_ALIGN {
+    ($a: expr) => {ALIGN!($a, PAGE_SIZE)}
+}

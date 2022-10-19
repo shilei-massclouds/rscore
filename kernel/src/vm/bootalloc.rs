@@ -26,7 +26,7 @@ impl BootAlloc {
     }
 
     pub fn alloc_page_phys(&mut self) -> usize {
-        let ptr = ALIGN!(self.end, PAGE_SIZE);
+        let ptr = PAGE_ALIGN!(self.end);
         self.end = ptr + PAGE_SIZE;
 
         ptr

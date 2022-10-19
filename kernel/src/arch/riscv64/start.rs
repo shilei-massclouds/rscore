@@ -7,6 +7,7 @@
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 use super::csr::*;
+use crate::vm::bootalloc::*;
 use crate::config_generated::*;
 
 /*
@@ -47,6 +48,9 @@ fn start_kernel(hartid: usize) {
 
     /* Setup stack for boot hart */
     setup_boot_stack();
+
+    /* The boot allocator only works in the early stage */
+    let bootalloc = BootAlloc::new();
 }
 
 unsafe extern "C"
@@ -68,7 +72,7 @@ fn prepare(hartid: usize) {
          */
         "li t0, {SR_FS}
          csrc sstatus, t0",
-    
+
         /* Save hart ID and DTB physical address */
         "la a2, {BOOT_HARTID}
          sd a0, (a2)

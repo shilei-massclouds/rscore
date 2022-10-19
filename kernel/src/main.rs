@@ -10,8 +10,14 @@
 #![feature(default_alloc_error_handler)]
 
 mod lang;
-mod arch;
+mod vm;
 mod config_generated;
+
+#[macro_use]
+mod align;
+
+#[path = "arch/riscv64/mod.rs"]
+mod arch;
 
 use core::sync::atomic::AtomicI32;
 

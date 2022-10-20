@@ -10,6 +10,7 @@
 #![feature(default_alloc_error_handler)]
 
 mod lang;
+mod errors;
 mod vm;
 mod config_generated;
 

@@ -13,14 +13,14 @@ extern "C" {
 }
 
 pub struct BootAlloc {
-    start: usize,
+    _start: usize,
     end: usize,
 }
 
 impl BootAlloc {
     pub fn new() -> BootAlloc {
         BootAlloc {
-            start: _end as usize,
+            _start: _end as usize,
             end: _end as usize,
         }
     }

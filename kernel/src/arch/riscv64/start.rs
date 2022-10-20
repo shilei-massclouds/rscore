@@ -8,9 +8,16 @@ use core::arch::asm;
 use core::sync::atomic::Ordering;
 use super::csr::*;
 use super::defines::*;
-use super::mmu;
+use super::mmu::{
+    riscv64_boot_map, riscv64_setup_trampoline, SWAPPER_PG_DIR,
+    TRAMPOLINE_SATP, SWAPPER_SATP,
+    PAGE_KERNEL, PAGE_KERNEL_EXEC
+};
 use crate::vm::bootalloc::*;
 use crate::config_generated::*;
+
+#[link_section = ".bss..page_aligned"]
+static mut BOOT_STACK: [u8; _CONFIG_STACK_SIZE] = [0u8; _CONFIG_STACK_SIZE];
 
 /*
  * Entry
@@ -28,6 +35,60 @@ fn _start(hartid: usize, dtb_pa: usize) -> ! {
     )
 }
 
+#[link_section = ".head.text"]
+unsafe extern "C"
+fn relocate_enable_mmu() {
+    asm!(
+        /* Calculate diffence between va and pa for kernel */
+        ".align 2
+         li t2, {kernel_base}
+         la t3, __code_start
+         sub t2, t2, t3",
+
+        /* Relocate return address */
+        "add ra, ra, t2",
+
+        /*
+         * Set satp for swapper page directory,
+         * but don't use it now!
+         */
+        "la t1, {swapper_satp}
+         ld t1, (t1)",
+
+        /*
+         * Set satp for trampoline page directory and turn on MMU.
+         * We need a full fence here because boot_map() just wrote these PTEs and
+         * we need to ensure the new translations are in use.
+         */
+        "la t0, {trampoline_satp}
+         ld t0, (t0)
+         sfence.vma
+         csrw satp, t0",    /* Turn on MMU based on trampoline pg dir */
+
+        /* PC = next_PC + diffence */
+        "la t0, 1f
+         add t0, t0, t2
+         jr t0
+        .align 2
+        1:
+         sfence.vma
+         csrw satp, t1",    /* Turn on MMU based on swapper pg dir */
+
+        /* Reload the global pointer */
+        ".option push
+         .option norelax
+         la gp, __global_pointer$
+         .option pop",
+
+        kernel_base = const KERNEL_BASE,
+        trampoline_satp = sym TRAMPOLINE_SATP,
+        swapper_satp = sym SWAPPER_SATP,
+    );
+
+    /* Reset stack pointer */
+    setup_boot_stack();
+}
+
 unsafe extern "C"
 fn start_kernel(hartid: usize) {
     prepare(hartid);
@@ -42,11 +103,7 @@ fn start_kernel(hartid: usize) {
     }
 
     /* Clear BSS */
-    extern "C" {
-        static mut __bss_start: u64;
-        static mut _end: u64;
-    }
-    r0::zero_bss(&mut __bss_start, &mut _end);
+    r0::zero_bss(&mut (__bss_start as u64), &mut (_end as u64));
 
     /* Setup stack for boot hart */
     setup_boot_stack();
@@ -54,14 +111,32 @@ fn start_kernel(hartid: usize) {
     /* The boot allocator only works in the early stage */
     let mut bootalloc = BootAlloc::new();
 
-    /* Map a large run of physical memory
+    /* map a large run of physical memory
      * at the base of the kernel's address space */
-    let ret = mmu::riscv64_boot_map(&mut bootalloc, &mut (mmu::SWAPPER_PG_DIR),
-                                    KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE,
-                                    0);
+    let ret = riscv64_boot_map(&mut bootalloc, &mut SWAPPER_PG_DIR,
+                               KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE,
+                               PAGE_KERNEL);
     if let Err(_) = ret {
         return;
     }
+
+    /* Symbol __code_start and _end comes from kernel.ld */
+    let kernel_base_phys = __code_start as usize;
+    let kernel_size = (_end as usize) - kernel_base_phys;
+
+    /* map the kernel to a fixed address */
+    let ret = riscv64_boot_map(&mut bootalloc, &mut SWAPPER_PG_DIR,
+                               KERNEL_BASE, kernel_base_phys, kernel_size,
+                               PAGE_KERNEL_EXEC);
+    if let Err(_) = ret {
+        return;
+    }
+
+    /* Setup trampoline: mapping at phys -> phys */
+    riscv64_setup_trampoline(kernel_base_phys);
+
+    /* Enable MMU */
+    relocate_enable_mmu();
 }
 
 unsafe extern "C"
@@ -105,10 +180,6 @@ fn prepare(hartid: usize) {
 
 unsafe extern "C"
 fn setup_boot_stack() {
-    #[link_section = ".bss..page_aligned"]
-    static mut BOOT_STACK: [u8; _CONFIG_STACK_SIZE]
-        = [0u8; _CONFIG_STACK_SIZE];
-
     asm! (
         "li t0, {stack_size}
          la sp, {boot_stack}

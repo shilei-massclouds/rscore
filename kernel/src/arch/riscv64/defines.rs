@@ -20,3 +20,14 @@ pub const KERNEL_ASPACE_BASE: usize = 0xffff_0000_0000_0000;
  * with a single level 1 page table using 1GB pages.
  */
 pub const ARCH_PHYSMAP_SIZE: usize = 1 << 39;
+
+pub const KERNEL_BASE: usize = _CONFIG_KERNEL_BASE;
+
+pub const SATP_MODE_48: usize = 0x9000000000000000;
+
+/* These symbols come from kernel.ld */
+extern "C" {
+    pub fn __code_start();
+    pub fn __bss_start();
+    pub fn _end();
+}

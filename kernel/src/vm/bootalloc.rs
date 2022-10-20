@@ -7,11 +7,6 @@
 use crate::*;
 use crate::arch::defines::*;
 
-/* Symbol _end comes from kernel.ld */
-extern "C" {
-    fn _end();
-}
-
 pub struct BootAlloc {
     _start: usize,
     end: usize,

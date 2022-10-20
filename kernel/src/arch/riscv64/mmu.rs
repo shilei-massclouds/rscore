@@ -34,11 +34,11 @@ const _PAGE_LEAF: usize = _PAGE_READ | _PAGE_WRITE | _PAGE_EXEC;
 
 const PAGE_TABLE: usize = _PAGE_PRESENT;
 
-const PAGE_KERNEL: usize =
+pub const PAGE_KERNEL: usize =
     _PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE |
     _PAGE_GLOBAL | _PAGE_ACCESSED | _PAGE_DIRTY;
 
-//const PAGE_KERNEL_EXEC : usize = PAGE_KERNEL | _PAGE_EXEC;
+pub const PAGE_KERNEL_EXEC : usize = PAGE_KERNEL | _PAGE_EXEC;
 
 const PAGE_TABLE_ENTRIES: usize = 1 << (PAGE_SHIFT - 3);
 
@@ -65,8 +65,11 @@ impl PageTable {
     }
 }
 
-//pub static TRAMPOLINE_PG_DIR: PageTable = PageTable::ZERO;
+static mut TRAMPOLINE_PG_DIR: PageTable = PageTable::ZERO;
 pub static mut SWAPPER_PG_DIR: PageTable = PageTable::ZERO;
+
+pub static mut TRAMPOLINE_SATP: usize = 0;
+pub static mut SWAPPER_SATP: usize = 0;
 
 macro_rules! LEVEL_SHIFT {
     ($level: expr, $nlevels: expr) => {
@@ -105,7 +108,7 @@ fn aligned_in_level(addr: usize, level: usize, nlevels: usize) -> bool {
 
 fn _boot_map<F0, F1>(table: &mut PageTable, nlevels: usize, level: usize,
                      vaddr: usize, paddr: usize, len: usize,
-                     exflag: usize,
+                     prot: usize,
                      alloc_func: &mut F0, phys_to_virt: &F1) -> Result<Error, Error>
 where F0: FnMut() -> usize,
       F1: Fn(usize) -> usize
@@ -115,8 +118,7 @@ where F0: FnMut() -> usize,
         let index = vaddr_to_index(vaddr + off, level, nlevels);
         if level == (nlevels-1) {
             /* generate a standard leaf mapping */
-            table.mk_item(index, PA_TO_PFN!(paddr + off),
-                          PAGE_KERNEL|exflag);
+            table.mk_item(index, PA_TO_PFN!(paddr + off), prot);
 
             off += PAGE_SIZE;
             continue;
@@ -127,8 +129,7 @@ where F0: FnMut() -> usize,
                 aligned_in_level(paddr+off, level, nlevels) &&
                 ((len - off) >= LEVEL_SIZE!(level, nlevels)) {
                 /* set up a leaf at this level */
-                table.mk_item(index, PA_TO_PFN!(paddr + off),
-                              PAGE_KERNEL|exflag);
+                table.mk_item(index, PA_TO_PFN!(paddr + off), prot);
 
                 off += LEVEL_SIZE!(level, nlevels);
                 continue;
@@ -147,7 +148,7 @@ where F0: FnMut() -> usize,
         unsafe {
             _boot_map(&mut (*lower_table_ptr), nlevels, level+1,
                       vaddr+off, paddr+off, lower_len,
-                      exflag, alloc_func, phys_to_virt)?;
+                      prot, alloc_func, phys_to_virt)?;
         }
 
         off += LEVEL_SIZE!(level, nlevels);
@@ -159,7 +160,7 @@ where F0: FnMut() -> usize,
 pub fn riscv64_boot_map(bootalloc: &mut BootAlloc,
                         table: &mut PageTable,
                         vaddr: usize, paddr: usize, len: usize,
-                        exflag: usize) -> Result<Error, Error> {
+                        prot: usize) -> Result<Error, Error> {
     /* The following helper routines assume that code is running
      * in physical addressing mode (mmu off).
      * Any physical addresses calculated are assumed to be
@@ -176,5 +177,27 @@ pub fn riscv64_boot_map(bootalloc: &mut BootAlloc,
      * using the largest page size supported.
      * Allocates necessar page tables along the way. */
     _boot_map(table, MMU_LEVELS, 0,
-              vaddr, paddr, len, exflag, &mut alloc, &phys_to_virt)
+              vaddr, paddr, len, prot, &mut alloc, &phys_to_virt)
+}
+
+pub unsafe fn riscv64_setup_trampoline(kernel_base_phys: usize)
+{
+    /* mapping at phys -> phys */
+    let index = vaddr_to_index(kernel_base_phys, 0, MMU_LEVELS);
+    TRAMPOLINE_PG_DIR.mk_item(index,
+                              PA_TO_PFN!(kernel_base_phys),
+                              PAGE_KERNEL_EXEC);
+    /* mapping at virt -> phys */
+    let index = vaddr_to_index(KERNEL_BASE, 0, MMU_LEVELS);
+    TRAMPOLINE_PG_DIR.mk_item(index,
+                              PA_TO_PFN!(kernel_base_phys),
+                              PAGE_KERNEL_EXEC);
+
+    let ptr = (&TRAMPOLINE_PG_DIR) as *const PageTable;
+    let pfn = (ptr as usize) >> PAGE_SHIFT;
+    TRAMPOLINE_SATP = SATP_MODE_48 | pfn;
+
+    let ptr = (&SWAPPER_PG_DIR) as *const PageTable;
+    let pfn = (ptr as usize) >> PAGE_SHIFT;
+    SWAPPER_SATP = SATP_MODE_48 | pfn;
 }

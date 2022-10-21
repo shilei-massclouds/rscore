@@ -102,44 +102,45 @@ fn _start() -> ! {
     );
 }
 
+#[naked]
+#[repr(align(4))]
 #[link_section = ".head.text"]
 unsafe extern "C"
 fn relocate_enable_mmu() {
     asm!(
-        /* Calculate diffence between va and pa for kernel */
-        ".align 2
-         li t2, {kernel_base}
-         la t3, __code_start
-         sub t2, t2, t3",
+        /* Calculate offset between va and pa for kernel */
+        "li a1, {kernel_base}
+         la a2, __code_start
+         sub a1, a1, a2",
 
         /* Relocate return address */
-        "add ra, ra, t2",
+        "add ra, ra, a1",
+
+        /* Point stvec to virtual address of intruction
+         * after satp write */
+        "la a2, 1f
+         add a2, a2, a1
+         csrw stvec, a2",
+
+        /* Compute satp for swapper page tables,
+         * but don't load it yet */
+        "la a2, {swapper_satp}
+         ld a2, (a2)",
 
         /*
-         * Set satp for swapper page directory,
-         * but don't use it now!
+         * Load trampoline page directory, which will cause us to trap
+         * to stvec if VA != PA, or simply fall through if VA == PA.
+         * We need a full fence here because boot_map()
+         * just wrote these PTEs and we need to ensure
+         * the new translations are in use.
          */
-        "la t1, {swapper_satp}
-         ld t1, (t1)",
-
-        /*
-         * Set satp for trampoline page directory and turn on MMU.
-         * We need a full fence here because boot_map() just wrote these PTEs and
-         * we need to ensure the new translations are in use.
-         */
-        "la t0, {trampoline_satp}
-         ld t0, (t0)
+        "la a0, {trampoline_satp}
+         ld a0, (a0)
          sfence.vma
-         csrw satp, t0",    /* Turn on MMU based on trampoline pg dir */
+         csrw satp, a0",    /* Turn on MMU based on trampoline pg dir */
 
-        /* PC = next_PC + diffence */
-        "la t0, 1f
-         add t0, t0, t2
-         jr t0
-        .align 2
-        1:
-         sfence.vma
-         csrw satp, t1",    /* Turn on MMU based on swapper pg dir */
+        ".align 2
+        1:",
 
         /* Reload the global pointer */
         ".option push
@@ -152,11 +153,24 @@ fn relocate_enable_mmu() {
          la sp, {boot_stack}
          add sp, sp, t0",
 
+        /*
+         * Switch to swapper page tables.
+         * A full fence is necessary in order to avoid using
+         * the trampoline translations, which are only correct for
+         * the first superpage.
+         * Fetching the fence is guaranteed to work
+         * because that first superpage is translated the same way.
+         */
+        "csrw satp, a2
+         sfence.vma
+         ret",
+
         kernel_base = const KERNEL_BASE,
         trampoline_satp = sym TRAMPOLINE_SATP,
         swapper_satp = sym SWAPPER_SATP,
         stack_size = const _CONFIG_STACK_SIZE,
         boot_stack = sym BOOT_STACK,
+        options(noreturn)
     );
 }
 
@@ -191,6 +205,8 @@ fn start_kernel() {
 
     /* Enable MMU */
     relocate_enable_mmu();
+
+    asm!("ebreak");
 }
 
 unsafe extern "C"

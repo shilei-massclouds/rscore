@@ -96,9 +96,15 @@ macro_rules! LEVEL_MASK {
 /* Todo: set it according to KERNEL_ASPACE_BASE */
 const MMU_LEVELS: usize = 4;
 
+macro_rules! LEVEL_PA_TO_PFN {
+    ($pa: expr, $level: expr) => {
+        (($pa) >> LEVEL_SHIFT!($level, MMU_LEVELS))
+    }
+}
+
 macro_rules! PA_TO_PFN {
     ($pa: expr) => {
-        ($pa >> PAGE_SHIFT)
+        (($pa) >> PAGE_SHIFT)
     }
 }
 
@@ -132,8 +138,10 @@ where F0: FnMut() -> usize,
                 aligned_in_level(vaddr+off, level, nlevels) &&
                 aligned_in_level(paddr+off, level, nlevels) &&
                 ((len - off) >= LEVEL_SIZE!(level, nlevels)) {
-                /* set up a leaf at this level */
-                table.mk_item(index, PA_TO_PFN!(paddr + off), prot);
+                /* set up a large leaf at this level */
+                table.mk_item(index,
+                              LEVEL_PA_TO_PFN!(paddr + off, level),
+                              prot);
 
                 off += LEVEL_SIZE!(level, nlevels);
                 continue;
@@ -190,12 +198,12 @@ pub unsafe fn riscv64_setup_trampoline(kernel_base_phys: usize)
     /* mapping at phys -> phys */
     let index = vaddr_to_index(kernel_base_phys, 0, MMU_LEVELS);
     TRAMPOLINE_PG_DIR.mk_item(index,
-                              PA_TO_PFN!(kernel_base_phys),
+                              LEVEL_PA_TO_PFN!(kernel_base_phys, 0),
                               PAGE_KERNEL_EXEC);
     /* mapping at virt -> phys */
     let index = vaddr_to_index(KERNEL_BASE, 0, MMU_LEVELS);
     TRAMPOLINE_PG_DIR.mk_item(index,
-                              PA_TO_PFN!(kernel_base_phys),
+                              LEVEL_PA_TO_PFN!(kernel_base_phys, 0),
                               PAGE_KERNEL_EXEC);
 
     let ptr = (&TRAMPOLINE_PG_DIR) as *const PageTable;

@@ -6,6 +6,8 @@
 
 use crate::config_generated::*;
 
+pub const NR_CPUS: usize = _CONFIG_NR_CPUS;
+
 pub const PAGE_SHIFT: usize = _CONFIG_PAGE_SHIFT;
 pub const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
 //pub const PAGE_MASK: usize = PAGE_SIZE - 1;

@@ -48,6 +48,10 @@ pub struct PageTable([usize; PAGE_TABLE_ENTRIES]);
 impl PageTable {
     const ZERO: Self = Self([0usize; PAGE_TABLE_ENTRIES]);
 
+    fn clear(&mut self) {
+        self.0 = [0; PAGE_TABLE_ENTRIES];
+    }
+
     fn mk_item(&mut self, index: usize, pfn: usize, prot: usize) {
         self.0[index] = (pfn << _PAGE_PFN_SHIFT) | prot;
     }
@@ -146,6 +150,7 @@ where F0: FnMut() -> usize,
         let lower_table_ptr = table.item_descend(index);
         let lower_len = min(LEVEL_SIZE!(level+1, nlevels), len-off);
         unsafe {
+            (*lower_table_ptr).clear();
             _boot_map(&mut (*lower_table_ptr), nlevels, level+1,
                       vaddr+off, paddr+off, lower_len,
                       prot, alloc_func, phys_to_virt)?;

@@ -153,6 +153,12 @@ fn relocate_enable_mmu() {
          la sp, {boot_stack}
          add sp, sp, t0",
 
+        /* Setup thread pointer */
+        /* Todo: la tp, init_task */
+
+        /* Setup trap vector */
+        /* Todo: stvec */
+
         /*
          * Switch to swapper page tables.
          * A full fence is necessary in order to avoid using
@@ -206,7 +212,10 @@ fn start_kernel() {
     /* Enable MMU */
     relocate_enable_mmu();
 
-    asm!("ebreak");
+    /* Set the per cpu pointer for cpu 0 */
+
+    /* Enter main */
+    crate::lk_main();
 }
 
 unsafe extern "C"

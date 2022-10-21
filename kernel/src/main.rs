@@ -27,3 +27,7 @@ static HART_LOTTERY: AtomicI32 = AtomicI32::new(0);
 
 static BOOT_HARTID: usize = 0;
 static DTB_PA: usize = 0;
+
+/* called from arch code */
+fn lk_main() {
+}

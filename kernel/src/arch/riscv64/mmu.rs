@@ -4,10 +4,12 @@
  * at https://opensource.org/licenses/MIT
  */
 
+extern crate alloc;
+
 use core::cmp::min;
+use core::alloc::*;
 use super::defines::*;
 use crate::errors::Error;
-use crate::vm::bootalloc::*;
 
 /*
  * PTE format:
@@ -42,7 +44,7 @@ pub const PAGE_KERNEL_EXEC : usize = PAGE_KERNEL | _PAGE_EXEC;
 
 const PAGE_TABLE_ENTRIES: usize = 1 << (PAGE_SHIFT - 3);
 
-#[repr(align(4096))]
+#[repr(C, align(4096))]
 pub struct PageTable([usize; PAGE_TABLE_ENTRIES]);
 
 impl PageTable {
@@ -116,12 +118,11 @@ fn aligned_in_level(addr: usize, level: usize, nlevels: usize) -> bool {
     (addr & !(LEVEL_MASK!(level, nlevels))) == 0
 }
 
-fn _boot_map<F0, F1>(table: &mut PageTable, nlevels: usize, level: usize,
+fn _boot_map<F1>(table: &mut PageTable, nlevels: usize, level: usize,
                      vaddr: usize, paddr: usize, len: usize,
                      prot: usize,
-                     alloc_func: &mut F0, phys_to_virt: &F1) -> Result<Error, Error>
-where F0: FnMut() -> usize,
-      F1: Fn(usize) -> usize
+                     phys_to_virt: &F1) -> Result<Error, Error>
+where F1: Fn(usize) -> usize
 {
     let mut off = 0;
     while off < len {
@@ -147,8 +148,11 @@ where F0: FnMut() -> usize,
                 continue;
             }
 
-            let pa: usize = alloc_func();
-            table.mk_item(index, PA_TO_PFN!(pa), PAGE_TABLE);
+            let layout = Layout::from_size_align(4096, 4096).unwrap();
+            unsafe {
+                let pa: usize = alloc::alloc::alloc(layout) as usize;
+                table.mk_item(index, PA_TO_PFN!(pa), PAGE_TABLE);
+            }
         }
         if table.item_leaf(index) {
             /* not legal as a leaf at this level */
@@ -161,7 +165,7 @@ where F0: FnMut() -> usize,
             (*lower_table_ptr).clear();
             _boot_map(&mut (*lower_table_ptr), nlevels, level+1,
                       vaddr+off, paddr+off, lower_len,
-                      prot, alloc_func, phys_to_virt)?;
+                      prot, phys_to_virt)?;
         }
 
         off += LEVEL_SIZE!(level, nlevels);
@@ -170,27 +174,16 @@ where F0: FnMut() -> usize,
     return Ok(Error::OK);
 }
 
-pub fn riscv64_boot_map(bootalloc: &mut BootAlloc,
-                        table: &mut PageTable,
+pub fn riscv64_boot_map(table: &mut PageTable,
                         vaddr: usize, paddr: usize, len: usize,
                         prot: usize) -> Result<Error, Error> {
-    /* The following helper routines assume that code is running
-     * in physical addressing mode (mmu off).
-     * Any physical addresses calculated are assumed to be
-     * the same as virtual */
-    let mut alloc = || {
-        /* allocate a page out of the boot allocator,
-         * asking for a physical address */
-        bootalloc.alloc_page_phys()
-    };
-
     let phys_to_virt = |pa: usize| { pa };
 
     /* Loop through the virtual range and map each physical page,
      * using the largest page size supported.
      * Allocates necessar page tables along the way. */
     _boot_map(table, MMU_LEVELS, 0,
-              vaddr, paddr, len, prot, &mut alloc, &phys_to_virt)
+              vaddr, paddr, len, prot, &mut &phys_to_virt)
 }
 
 pub unsafe fn riscv64_setup_trampoline(kernel_base_phys: usize)

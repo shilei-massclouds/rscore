@@ -6,24 +6,44 @@
 
 use crate::*;
 use crate::arch::defines::*;
+use core::alloc::{GlobalAlloc, Layout};
+use core::ptr::null_mut;
+use core::sync::atomic::{
+    AtomicUsize,
+    Ordering::{Acquire, SeqCst},
+};
 
-pub struct BootAlloc {
-    _start: usize,
-    end: usize,
+const MAX_SUPPORTED_ALIGN: usize = 4096;
+
+#[repr(C, align(4096))]
+struct BootAllocator {
+    allocated: AtomicUsize,
 }
 
-impl BootAlloc {
-    pub fn new() -> BootAlloc {
-        BootAlloc {
-            _start: _end as usize,
-            end: _end as usize,
+unsafe impl GlobalAlloc for BootAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let size = layout.size();
+        let align = layout.align();
+
+        if align > MAX_SUPPORTED_ALIGN {
+            return null_mut();
         }
+
+        if self.allocated.fetch_update(SeqCst, SeqCst, |mut allocated| {
+                allocated += size;
+                allocated = ROUNDUP!(allocated, align);
+                Some(allocated)
+        }).is_err() {
+            return null_mut();
+        };
+
+        (_end as *mut u8).add(self.allocated.load(Acquire))
     }
 
-    pub fn alloc_page_phys(&mut self) -> usize {
-        let ptr = PAGE_ALIGN!(self.end);
-        self.end = ptr + PAGE_SIZE;
-
-        ptr
-    }
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
 }
+
+#[global_allocator]
+static ALLOCATOR: BootAllocator = BootAllocator {
+    allocated: AtomicUsize::new(0),
+};

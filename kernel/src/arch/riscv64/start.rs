@@ -12,7 +12,6 @@ use super::mmu::{
     TRAMPOLINE_SATP, SWAPPER_SATP,
     PAGE_KERNEL, PAGE_KERNEL_EXEC
 };
-use crate::vm::bootalloc::*;
 use crate::config_generated::*;
 
 #[link_section = ".bss..page_aligned"]
@@ -182,12 +181,9 @@ fn relocate_enable_mmu() {
 
 unsafe extern "C"
 fn start_kernel() {
-    /* The boot allocator only works in the early stage */
-    let mut bootalloc = BootAlloc::new();
-
     /* map a large run of physical memory
      * at the base of the kernel's address space */
-    let ret = riscv64_boot_map(&mut bootalloc, &mut SWAPPER_PG_DIR,
+    let ret = riscv64_boot_map(&mut SWAPPER_PG_DIR,
                                KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE,
                                PAGE_KERNEL);
     if let Err(_) = ret {
@@ -199,7 +195,7 @@ fn start_kernel() {
     let kernel_size = (_end as usize) - kernel_base_phys;
 
     /* map the kernel to a fixed address */
-    let ret = riscv64_boot_map(&mut bootalloc, &mut SWAPPER_PG_DIR,
+    let ret = riscv64_boot_map(&mut SWAPPER_PG_DIR,
                                KERNEL_BASE, kernel_base_phys, kernel_size,
                                PAGE_KERNEL_EXEC);
     if let Err(_) = ret {
@@ -218,10 +214,10 @@ fn start_kernel() {
     crate::lk_main();
 }
 
-unsafe extern "C"
-fn secondary_park() {
-    /* Lack SMP support or have too many harts, so part this hart! */
-    loop {
-        asm!("wfi")
-    }
-}
+//unsafe extern "C"
+//fn secondary_park() {
+//    /* Lack SMP support or have too many harts, so part this hart! */
+//    loop {
+//        asm!("wfi")
+//    }
+//}

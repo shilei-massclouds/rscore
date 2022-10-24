@@ -4,12 +4,12 @@
  * at https://opensource.org/licenses/MIT
  */
 
-use super::defines::*;
+//use super::defines::*;
 
-struct riscv64_percpu {
-    cpuid: usize,       /* Logical ID in kernel */
-    hartid: usize,      /* Hardware ID */
-}
+//struct PerCPU {
+//    cpuid: usize,       /* Logical ID in kernel */
+//    hartid: usize,      /* Hardware ID */
+//}
 
 /* per cpu structures */
 /*

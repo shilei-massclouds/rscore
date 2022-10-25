@@ -50,8 +50,11 @@ fn lk_main() {
      * and global ctors finished (some of the printf machinery
      * depends on ctors right now). */
     //dprint!(ALWAYS, "printing enabled\n");
-    let a = String::from("hello");
-    for ch in a.chars() {
-        console_putchar(ch);
+    use crate::arch::defines::KERNEL_ASPACE_BITS;
+    if KERNEL_ASPACE_BITS == 48 {
+        let a = String::from("hello");
+        for ch in a.chars() {
+            console_putchar(ch);
+        }
     }
 }

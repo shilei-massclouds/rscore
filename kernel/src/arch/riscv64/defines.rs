@@ -15,7 +15,8 @@ pub const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
 /* Virtual address where the kernel address space begins.
  * Below this is the user address space. */
 pub const KERNEL_ASPACE_BASE: usize = 0xffff_0000_0000_0000;
-//pub const KERNEL_ASPACE_SIZE: usize = 0x0001_0000_0000_0000;
+pub const KERNEL_ASPACE_SIZE: usize = 0x0001_0000_0000_0000;
+pub const KERNEL_ASPACE_MASK: usize = KERNEL_ASPACE_SIZE - 1;
 
 /* map 512GB at the base of the kernel.
  * this is the max that can be mapped
@@ -27,7 +28,53 @@ pub const BOOT_HEAP_SIZE: usize = _CONFIG_BOOT_HEAP_SIZE;
 
 pub const KERNEL_BASE: usize = _CONFIG_KERNEL_BASE;
 
+pub const SATP_MODE_39: usize = 0x8000000000000000;
 pub const SATP_MODE_48: usize = 0x9000000000000000;
+
+/* clang-format off */
+macro_rules! IFTE {
+    ($c: expr, $t: expr, $e: expr) => {
+        if $c != 0usize { $t } else { $e }
+    }
+}
+
+macro_rules! NBITS01 {
+    ($n: expr) => {
+        IFTE!($n, 1, 0)
+    }
+}
+macro_rules! NBITS02 {
+    ($n: expr) => {
+        IFTE!(($n) >>  1,  1 + NBITS01!(($n) >>  1), NBITS01!($n))
+    }
+}
+macro_rules! NBITS04 {
+    ($n: expr) => {
+        IFTE!(($n) >>  2,  2 + NBITS02!(($n) >>  2), NBITS02!($n))
+    }
+}
+macro_rules! NBITS08 {
+    ($n: expr) => {
+        IFTE!(($n) >>  4,  4 + NBITS04!(($n) >>  4), NBITS04!($n))
+    }
+}
+macro_rules! NBITS16 {
+    ($n: expr) => {
+        IFTE!(($n) >>  8,  8 + NBITS08!(($n) >>  8), NBITS08!($n))
+    }
+}
+macro_rules! NBITS32 {
+    ($n: expr) => {
+        IFTE!(($n) >> 16, 16 + NBITS16!(($n) >> 16), NBITS16!($n))
+    }
+}
+macro_rules! NBITS {
+    ($n: expr) => {
+        IFTE!(($n) >> 32, 32 + NBITS32!(($n) >> 32), NBITS32!($n))
+    }
+}
+
+pub const KERNEL_ASPACE_BITS: usize = NBITS!(KERNEL_ASPACE_MASK);
 
 /* These symbols come from kernel.ld */
 extern "C" {

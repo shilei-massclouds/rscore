@@ -27,14 +27,6 @@ static mut BOOT_STACK: [u8; _CONFIG_STACK_SIZE] = [0u8; _CONFIG_STACK_SIZE];
 unsafe extern "C"
 fn _start() -> ! {
     asm!(
-        /* Make sure hartid < CONFIG_NR_CPUS */
-        "li t0, {NR_CPUS}
-         blt a0, t0, 1f
-        0:
-         wfi
-         j 0b
-        1:",
-
         /* Mask all interrupts */
         "csrw sie, zero
          csrw sip, zero",
@@ -51,6 +43,10 @@ fn _start() -> ! {
          */
         "li t0, {SR_FS}
          csrc sstatus, t0",
+
+        /* Make sure hartid < CONFIG_NR_CPUS */
+        "li t0, {NR_CPUS}
+         bge a0, t0, 1f",
 
         /* Pick one hart to run the main boot sequence.
          * Since early OpenSBI(version < v0.7) has no HSM extension,
@@ -88,6 +84,11 @@ fn _start() -> ! {
         "2:
          wfi
          j 2b",
+
+        /* Loop forever due to bad hartid. */
+        "1:
+         wfi
+         j 1b",
 
         NR_CPUS = const NR_CPUS,
         SR_FS = const SR_FS,

@@ -77,30 +77,36 @@ pub static mut SWAPPER_PG_DIR: PageTable = PageTable::ZERO;
 pub static mut TRAMPOLINE_SATP: usize = 0;
 pub static mut SWAPPER_SATP: usize = 0;
 
+const MMU_LEVELS: usize =
+    (KERNEL_ASPACE_BITS - PAGE_SHIFT) / (PAGE_SHIFT - 3);
+
+const SATP_MODE: usize = match MMU_LEVELS {
+    4 => SATP_MODE_48,
+    3 => SATP_MODE_39,
+    _ => 0,
+};
+
 macro_rules! LEVEL_SHIFT {
-    ($level: expr, $nlevels: expr) => {
-        (($nlevels - ($level)) * (PAGE_SHIFT - 3) + 3)
+    ($level: expr) => {
+        ((MMU_LEVELS - ($level)) * (PAGE_SHIFT - 3) + 3)
     }
 }
 
 macro_rules! LEVEL_SIZE {
-    ($level: expr, $nlevels: expr) => {
-        1 << LEVEL_SHIFT!($level, $nlevels)
+    ($level: expr) => {
+        1 << LEVEL_SHIFT!($level)
     }
 }
 
 macro_rules! LEVEL_MASK {
-    ($level: expr, $nlevels: expr) => {
-        !(LEVEL_SIZE!($level, $nlevels) - 1)
+    ($level: expr) => {
+        !(LEVEL_SIZE!($level) - 1)
     }
 }
 
-/* Todo: set it according to KERNEL_ASPACE_BASE */
-const MMU_LEVELS: usize = 4;
-
 macro_rules! LEVEL_PA_TO_PFN {
     ($pa: expr, $level: expr) => {
-        (($pa) >> LEVEL_SHIFT!($level, MMU_LEVELS))
+        (($pa) >> LEVEL_SHIFT!($level))
     }
 }
 
@@ -110,15 +116,15 @@ macro_rules! PA_TO_PFN {
     }
 }
 
-fn vaddr_to_index(addr: usize, level: usize, nlevels: usize) -> usize {
-    (addr >> LEVEL_SHIFT!(level, nlevels)) & (PAGE_TABLE_ENTRIES - 1)
+fn vaddr_to_index(addr: usize, level: usize) -> usize {
+    (addr >> LEVEL_SHIFT!(level)) & (PAGE_TABLE_ENTRIES - 1)
 }
 
-fn aligned_in_level(addr: usize, level: usize, nlevels: usize) -> bool {
-    (addr & !(LEVEL_MASK!(level, nlevels))) == 0
+fn aligned_in_level(addr: usize, level: usize) -> bool {
+    (addr & !(LEVEL_MASK!(level))) == 0
 }
 
-fn _boot_map<F1>(table: &mut PageTable, nlevels: usize, level: usize,
+fn _boot_map<F1>(table: &mut PageTable, level: usize,
                  vaddr: usize, paddr: usize, len: usize,
                  prot: usize,
                  phys_to_virt: &F1) -> Result<Error, Error>
@@ -126,8 +132,8 @@ where F1: Fn(usize) -> usize
 {
     let mut off = 0;
     while off < len {
-        let index = vaddr_to_index(vaddr + off, level, nlevels);
-        if level == (nlevels-1) {
+        let index = vaddr_to_index(vaddr + off, level);
+        if level == (MMU_LEVELS-1) {
             /* generate a standard leaf mapping */
             table.mk_item(index, PA_TO_PFN!(paddr + off), prot);
 
@@ -136,15 +142,15 @@ where F1: Fn(usize) -> usize
         }
         if !table.item_present(index) {
             if (level != 0) &&
-                aligned_in_level(vaddr+off, level, nlevels) &&
-                aligned_in_level(paddr+off, level, nlevels) &&
-                ((len - off) >= LEVEL_SIZE!(level, nlevels)) {
+                aligned_in_level(vaddr+off, level) &&
+                aligned_in_level(paddr+off, level) &&
+                ((len - off) >= LEVEL_SIZE!(level)) {
                 /* set up a large leaf at this level */
                 table.mk_item(index,
                               LEVEL_PA_TO_PFN!(paddr + off, level),
                               prot);
 
-                off += LEVEL_SIZE!(level, nlevels);
+                off += LEVEL_SIZE!(level);
                 continue;
             }
 
@@ -160,15 +166,15 @@ where F1: Fn(usize) -> usize
         }
 
         let lower_table_ptr = table.item_descend(index);
-        let lower_len = min(LEVEL_SIZE!(level, nlevels), len-off);
+        let lower_len = min(LEVEL_SIZE!(level), len-off);
         unsafe {
             (*lower_table_ptr).clear();
-            _boot_map(&mut (*lower_table_ptr), nlevels, level+1,
+            _boot_map(&mut (*lower_table_ptr), level+1,
                       vaddr+off, paddr+off, lower_len,
                       prot, phys_to_virt)?;
         }
 
-        off += LEVEL_SIZE!(level, nlevels);
+        off += LEVEL_SIZE!(level);
     }
 
     return Ok(Error::OK);
@@ -182,28 +188,27 @@ pub fn riscv64_boot_map(table: &mut PageTable,
     /* Loop through the virtual range and map each physical page,
      * using the largest page size supported.
      * Allocates necessar page tables along the way. */
-    _boot_map(table, MMU_LEVELS, 0,
-              vaddr, paddr, len, prot, &mut &phys_to_virt)
+    _boot_map(table, 0, vaddr, paddr, len, prot, &mut &phys_to_virt)
 }
 
 pub unsafe fn riscv64_setup_trampoline(kernel_base_phys: usize)
 {
     /* mapping at phys -> phys */
-    let index = vaddr_to_index(kernel_base_phys, 0, MMU_LEVELS);
+    let index = vaddr_to_index(kernel_base_phys, 0);
     TRAMPOLINE_PG_DIR.mk_item(index,
                               LEVEL_PA_TO_PFN!(kernel_base_phys, 0),
                               PAGE_KERNEL_EXEC);
     /* mapping at virt -> phys */
-    let index = vaddr_to_index(KERNEL_BASE, 0, MMU_LEVELS);
+    let index = vaddr_to_index(KERNEL_BASE, 0);
     TRAMPOLINE_PG_DIR.mk_item(index,
                               LEVEL_PA_TO_PFN!(kernel_base_phys, 0),
                               PAGE_KERNEL_EXEC);
 
     let ptr = (&TRAMPOLINE_PG_DIR) as *const PageTable;
     let pfn = (ptr as usize) >> PAGE_SHIFT;
-    TRAMPOLINE_SATP = SATP_MODE_48 | pfn;
+    TRAMPOLINE_SATP = SATP_MODE| pfn;
 
     let ptr = (&SWAPPER_PG_DIR) as *const PageTable;
     let pfn = (ptr as usize) >> PAGE_SHIFT;
-    SWAPPER_SATP = SATP_MODE_48 | pfn;
+    SWAPPER_SATP = SATP_MODE| pfn;
 }

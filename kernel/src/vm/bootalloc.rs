@@ -10,7 +10,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;
 use core::sync::atomic::{
     AtomicUsize,
-    Ordering::{Acquire, SeqCst},
+    Ordering::SeqCst,
 };
 
 const MAX_SUPPORTED_ALIGN: usize = 4096;
@@ -29,15 +29,19 @@ unsafe impl GlobalAlloc for BootAllocator {
             return null_mut();
         }
 
+        let mut curr = 0;
         if self.allocated.fetch_update(SeqCst, SeqCst, |mut allocated| {
-                allocated += size;
-                allocated = ROUNDUP!(allocated, align);
-                Some(allocated)
+            curr = ROUNDUP!(allocated, align);
+            allocated = curr + size;
+            if allocated > BOOT_HEAP_SIZE {
+                return None;
+            }
+            Some(allocated)
         }).is_err() {
             return null_mut();
         };
 
-        (_end as *mut u8).add(self.allocated.load(Acquire))
+        (_end as *mut u8).add(curr)
     }
 
     #[inline]

@@ -23,6 +23,8 @@ pub const KERNEL_ASPACE_BASE: usize = 0xffff_0000_0000_0000;
  */
 pub const ARCH_PHYSMAP_SIZE: usize = 1 << 39;
 
+pub const BOOT_HEAP_SIZE: usize = _CONFIG_BOOT_HEAP_SIZE;
+
 pub const KERNEL_BASE: usize = _CONFIG_KERNEL_BASE;
 
 pub const SATP_MODE_48: usize = 0x9000000000000000;

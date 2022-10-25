@@ -15,12 +15,12 @@ use core::sync::atomic::{
 
 const MAX_SUPPORTED_ALIGN: usize = 4096;
 
-#[repr(C, align(4096))]
 struct BootAllocator {
     allocated: AtomicUsize,
 }
 
 unsafe impl GlobalAlloc for BootAllocator {
+    #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let size = layout.size();
         let align = layout.align();
@@ -40,6 +40,7 @@ unsafe impl GlobalAlloc for BootAllocator {
         (_end as *mut u8).add(self.allocated.load(Acquire))
     }
 
+    #[inline]
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
 }
 

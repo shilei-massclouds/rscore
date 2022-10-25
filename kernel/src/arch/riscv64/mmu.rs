@@ -119,9 +119,9 @@ fn aligned_in_level(addr: usize, level: usize, nlevels: usize) -> bool {
 }
 
 fn _boot_map<F1>(table: &mut PageTable, nlevels: usize, level: usize,
-                     vaddr: usize, paddr: usize, len: usize,
-                     prot: usize,
-                     phys_to_virt: &F1) -> Result<Error, Error>
+                 vaddr: usize, paddr: usize, len: usize,
+                 prot: usize,
+                 phys_to_virt: &F1) -> Result<Error, Error>
 where F1: Fn(usize) -> usize
 {
     let mut off = 0;
@@ -160,7 +160,7 @@ where F1: Fn(usize) -> usize
         }
 
         let lower_table_ptr = table.item_descend(index);
-        let lower_len = min(LEVEL_SIZE!(level+1, nlevels), len-off);
+        let lower_len = min(LEVEL_SIZE!(level, nlevels), len-off);
         unsafe {
             (*lower_table_ptr).clear();
             _boot_map(&mut (*lower_table_ptr), nlevels, level+1,

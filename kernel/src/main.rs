@@ -9,6 +9,7 @@
 #![feature(naked_functions, asm_sym, asm_const)]
 #![feature(default_alloc_error_handler)]
 #![feature(fn_align)]
+#![feature(repr_simd)]
 
 mod lang;
 mod errors;
@@ -23,8 +24,11 @@ mod align;
 #[path = "arch/riscv64/mod.rs"]
 mod arch;
 
+extern crate alloc;
+
 use core::sync::atomic::AtomicI32;
 use crate::arch::sbi::*;
+use alloc::string::String;
 //use crate::kernel::thread::thread_init_early;
 //use crate::lib::debuglog::debuglog::*;
 
@@ -46,5 +50,8 @@ fn lk_main() {
      * and global ctors finished (some of the printf machinery
      * depends on ctors right now). */
     //dprint!(ALWAYS, "printing enabled\n");
-    console_putchar('A');
+    let a = String::from("hello");
+    for ch in a.chars() {
+        console_putchar(ch);
+    }
 }

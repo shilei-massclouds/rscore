@@ -138,8 +138,11 @@ fn relocate_enable_mmu() {
          sfence.vma
          csrw satp, a0",    /* Turn on MMU based on trampoline pg dir */
 
+        /* Switch point from pa to va. */
         ".align 2
-        1:",
+        1:
+         la a0, 2f
+         csrw stvec, a0",   /* Set trap vector to spin forever temporarily. */
 
         /* Reload the global pointer */
         ".option push
@@ -155,9 +158,6 @@ fn relocate_enable_mmu() {
         /* Setup thread pointer */
         /* Todo: la tp, init_task */
 
-        /* Setup trap vector */
-        /* Todo: stvec */
-
         /*
          * Switch to swapper page tables.
          * A full fence is necessary in order to avoid using
@@ -169,6 +169,12 @@ fn relocate_enable_mmu() {
         "csrw satp, a2
          sfence.vma
          ret",
+
+        /* Loop forever for debug. */
+        ".align 2
+        2:
+         wfi
+         j 2b",
 
         kernel_base = const KERNEL_BASE,
         trampoline_satp = sym TRAMPOLINE_SATP,
@@ -192,11 +198,14 @@ fn start_kernel() {
 
     /* Symbol __code_start and _end comes from kernel.ld */
     let kernel_base_phys = __code_start as usize;
-    let kernel_size = (_end as usize) - kernel_base_phys;
+    let kernel_size = (_end as usize) - kernel_base_phys +
+        BOOT_HEAP_SIZE;
 
     /* map the kernel to a fixed address */
+    /* map the boot heap that just follows kernel address */
     let ret = riscv64_boot_map(&mut SWAPPER_PG_DIR,
-                               KERNEL_BASE, kernel_base_phys, kernel_size,
+                               KERNEL_BASE,
+                               kernel_base_phys, kernel_size,
                                PAGE_KERNEL_EXEC);
     if let Err(_) = ret {
         return;

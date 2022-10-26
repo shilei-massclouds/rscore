@@ -5,10 +5,10 @@
  */
 
 /* debug print levels */
-pub const CRITICAL  : u32 = 0;
+//pub const CRITICAL  : u32 = 0;
 pub const ALWAYS    : u32 = 0;
-pub const INFO      : u32 = 1;
-pub const SPEW      : u32 = 2;
+//pub const INFO      : u32 = 1;
+//pub const SPEW      : u32 = 2;
 
 pub const DEBUG_PRINT_LEVEL: u32 = 0;
 
@@ -16,7 +16,8 @@ pub const DEBUG_PRINT_LEVEL: u32 = 0;
 macro_rules! dprint {
     ($level: expr, $($arg:tt)*) => {
         if $level <= DEBUG_PRINT_LEVEL {
-            crate::lib::libc::print::vprint(core::format_args!($($arg)*));
+            crate::lib::libc::print::
+                vprint(core::format_args!($($arg)*));
         }
     }
 }

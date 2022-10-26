@@ -1,8 +1,15 @@
+/*
+ * Use of this source code is governed by a MIT-style license
+ * that can be found in the LICENSE file or
+ * at https://opensource.org/licenses/MIT
+ */
 
 use core::fmt;
 use super::fprint;
-use super::stdio::stdout;
+use super::stdio::STDOUT;
 
 pub fn vprint(args: fmt::Arguments) {
-    fprint::vfprint(&stdout, args);
+    unsafe {
+        fprint::vfprint(&mut STDOUT, args);
+    }
 }

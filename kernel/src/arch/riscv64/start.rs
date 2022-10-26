@@ -8,14 +8,15 @@ use core::arch::asm;
 use super::csr::*;
 use super::defines::*;
 use super::mmu::{
-    riscv64_boot_map, riscv64_setup_trampoline, SWAPPER_PG_DIR,
-    TRAMPOLINE_SATP, SWAPPER_SATP,
+    riscv64_boot_map, riscv64_setup_mmu_mode, SWAPPER_PG_DIR,
+    SWAPPER_SATP,
     PAGE_KERNEL, PAGE_KERNEL_EXEC
 };
 use crate::config_generated::*;
 
 #[link_section = ".bss..page_aligned"]
-static mut BOOT_STACK: [u8; _CONFIG_STACK_SIZE] = [0u8; _CONFIG_STACK_SIZE];
+static mut BOOT_STACK: [u8; _CONFIG_STACK_SIZE] =
+    [0u8; _CONFIG_STACK_SIZE];
 
 /*
  * Entry
@@ -128,22 +129,23 @@ fn relocate_enable_mmu() {
          ld a2, (a2)",
 
         /*
-         * Load trampoline page directory, which will cause us to trap
-         * to stvec if VA != PA, or simply fall through if VA == PA.
-         * We need a full fence here because boot_map()
-         * just wrote these PTEs and we need to ensure
-         * the new translations are in use.
+         * Switch to swapper page tables.
+         * Load swapper page directory, which will cause us to trap to
+         * stvec if VA != PA, or simply fall through if VA == PA.
+         * We need a full fence here because riscv64_boot_map() just
+         * wrote these PTEs and we need to ensure the new translations
+         * are in use.
          */
-        "la a0, {trampoline_satp}
-         ld a0, (a0)
-         sfence.vma
-         csrw satp, a0",    /* Turn on MMU based on trampoline pg dir */
+        "sfence.vma
+         csrw satp, a2",
 
         /* Switch point from pa to va. */
         ".align 2
-        1:
-         la a0, 2f
-         csrw stvec, a0",   /* Set trap vector to spin forever temporarily. */
+        1:",
+
+        /* Set trap vector to spin forever for debug. */
+        "la a0, 2f
+         csrw stvec, a0",
 
         /* Reload the global pointer */
         ".option push
@@ -159,17 +161,7 @@ fn relocate_enable_mmu() {
         /* Setup thread pointer */
         /* Todo: la tp, init_task */
 
-        /*
-         * Switch to swapper page tables.
-         * A full fence is necessary in order to avoid using
-         * the trampoline translations, which are only correct for
-         * the first superpage.
-         * Fetching the fence is guaranteed to work
-         * because that first superpage is translated the same way.
-         */
-        "csrw satp, a2
-         sfence.vma
-         ret",
+        "ret",
 
         /* Loop forever for debug. */
         ".align 2
@@ -178,7 +170,6 @@ fn relocate_enable_mmu() {
          j 2b",
 
         kernel_base = const KERNEL_BASE,
-        trampoline_satp = sym TRAMPOLINE_SATP,
         swapper_satp = sym SWAPPER_SATP,
         stack_size = const _CONFIG_STACK_SIZE,
         boot_stack = sym BOOT_STACK,
@@ -212,8 +203,8 @@ fn start_kernel() {
         return;
     }
 
-    /* Setup trampoline: mapping at phys -> phys */
-    riscv64_setup_trampoline(kernel_base_phys);
+    /* Setup value for register satp */
+    riscv64_setup_mmu_mode();
 
     /* Enable MMU */
     relocate_enable_mmu();

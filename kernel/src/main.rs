@@ -10,10 +10,12 @@
 #![feature(default_alloc_error_handler)]
 #![feature(fn_align)]
 #![feature(repr_simd)]
+#![feature(allow_internal_unstable)]
+#![feature(fmt_internals)]
 
 mod lang;
 mod errors;
-//mod lib;
+mod lib;
 //mod kernel;
 mod vm;
 mod config_generated;
@@ -28,9 +30,8 @@ extern crate alloc;
 
 use core::sync::atomic::AtomicI32;
 use crate::arch::sbi::*;
-use alloc::string::String;
 //use crate::kernel::thread::thread_init_early;
-//use crate::lib::debuglog::debuglog::*;
+use crate::lib::debuglog::debuglog::*;
 
 static HART_LOTTERY: AtomicI32 = AtomicI32::new(0);
 
@@ -43,18 +44,12 @@ fn lk_main() {
     //thread_init_early();
 
     /* bring the debuglog up early so we can safely printf */
-    //dlog_init_early();
+    dlog_init_early();
 
     /* we can safely printf now since we have the debuglog,
      * the current thread set which holds (a per-line buffer),
      * and global ctors finished (some of the printf machinery
      * depends on ctors right now). */
-    //dprint!(ALWAYS, "printing enabled\n");
-    use crate::arch::defines::KERNEL_ASPACE_BITS;
-    if KERNEL_ASPACE_BITS == 48 {
-        let a = String::from("hello");
-        for ch in a.chars() {
-            console_putchar(ch);
-        }
-    }
+    dprint!(ALWAYS, "printing enabled\n");
+    dprint!(ALWAYS, "prepare memory[{}] ... \n", 8);
 }

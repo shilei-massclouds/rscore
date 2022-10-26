@@ -71,20 +71,11 @@ impl PageTable {
     }
 }
 
-static mut TRAMPOLINE_PG_DIR: PageTable = PageTable::ZERO;
 pub static mut SWAPPER_PG_DIR: PageTable = PageTable::ZERO;
-
-pub static mut TRAMPOLINE_SATP: usize = 0;
 pub static mut SWAPPER_SATP: usize = 0;
 
 const MMU_LEVELS: usize =
     (KERNEL_ASPACE_BITS - PAGE_SHIFT) / (PAGE_SHIFT - 3);
-
-const SATP_MODE: usize = match MMU_LEVELS {
-    4 => SATP_MODE_48,
-    3 => SATP_MODE_39,
-    _ => 0,
-};
 
 macro_rules! LEVEL_SHIFT {
     ($level: expr) => {
@@ -191,24 +182,16 @@ pub fn riscv64_boot_map(table: &mut PageTable,
     _boot_map(table, 0, vaddr, paddr, len, prot, &mut &phys_to_virt)
 }
 
-pub unsafe fn riscv64_setup_trampoline(kernel_base_phys: usize)
+pub unsafe fn riscv64_setup_mmu_mode()
 {
-    /* mapping at phys -> phys */
-    let index = vaddr_to_index(kernel_base_phys, 0);
-    TRAMPOLINE_PG_DIR.mk_item(index,
-                              LEVEL_PA_TO_PFN!(kernel_base_phys, 0),
-                              PAGE_KERNEL_EXEC);
-    /* mapping at virt -> phys */
-    let index = vaddr_to_index(KERNEL_BASE, 0);
-    TRAMPOLINE_PG_DIR.mk_item(index,
-                              LEVEL_PA_TO_PFN!(kernel_base_phys, 0),
-                              PAGE_KERNEL_EXEC);
-
-    let ptr = (&TRAMPOLINE_PG_DIR) as *const PageTable;
-    let pfn = (ptr as usize) >> PAGE_SHIFT;
-    TRAMPOLINE_SATP = SATP_MODE| pfn;
-
     let ptr = (&SWAPPER_PG_DIR) as *const PageTable;
     let pfn = (ptr as usize) >> PAGE_SHIFT;
-    SWAPPER_SATP = SATP_MODE| pfn;
+
+    let mode = match MMU_LEVELS {
+        4 => SATP_MODE_48,
+        3 => SATP_MODE_39,
+        _ => 0,
+    };
+
+    SWAPPER_SATP = mode | pfn;
 }

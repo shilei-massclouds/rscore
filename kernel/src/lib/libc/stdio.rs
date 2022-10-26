@@ -1,12 +1,21 @@
+/*
+ * Use of this source code is governed by a MIT-style license
+ * that can be found in the LICENSE file or
+ * at https://opensource.org/licenses/MIT
+ */
 
-use core::alloc;
+use core::fmt::{Result, Write};
 
 pub struct FILE {
 }
 
-impl FILE {
-    pub fn Write(&self, s: &str) {
+impl Write for FILE {
+    fn write_str(&mut self, s: &str) -> Result {
+        for ch in s.chars() {
+            crate::console_putchar(ch);
+        }
+        Ok(())
     }
 }
 
-pub static stdout: FILE = FILE{};
+pub static mut STDOUT: FILE = FILE{};

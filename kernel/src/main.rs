@@ -38,36 +38,45 @@ use crate::platform::platform_early_init;
 use crate::lib::debuglog::debuglog::*;
 use alloc::vec::Vec;
 use crate::vm::bootreserve::{NUM_RESERVES, BootReserveRange};
+use crate::platform::{NUM_ARENAS, ArenaInfo};
 use crate::errors::ErrNO;
 
 pub struct BootContext {
+    hartid: usize,
+    dtb_pa: usize,
     kernel_base_phys: usize,
     kernel_size: usize,
     reserve_ranges: Vec<BootReserveRange>,
+    mem_arena: Vec<ArenaInfo>,
 }
 
 impl BootContext {
-    pub fn new(kernel_base_phys: usize,
+    pub fn new(hartid: usize,
+               dtb_pa: usize,
+               kernel_base_phys: usize,
                kernel_size: usize) -> BootContext {
 
         BootContext {
+            hartid,
+            dtb_pa,
             kernel_base_phys,
             kernel_size,
             reserve_ranges:
                 Vec::<BootReserveRange>::with_capacity(NUM_RESERVES),
+            mem_arena:
+                Vec::<ArenaInfo>::with_capacity(NUM_ARENAS),
         }
     }
 }
 
 static HART_LOTTERY: AtomicI32 = AtomicI32::new(0);
 
-static BOOT_HARTID: usize = 0;
-static DTB_PA: usize = 0;
-
 /* called from arch code */
-fn lk_main(kernel_base_phys: usize, kernel_size: usize)
+fn lk_main(hartid: usize, dtb_pa: usize,
+           kernel_base_phys: usize, kernel_size: usize)
     -> Result<(), ErrNO> {
-    let mut ctx = BootContext::new(kernel_base_phys, kernel_size);
+    let mut ctx = BootContext::new(hartid, dtb_pa,
+                                   kernel_base_phys, kernel_size);
 
     /* get us into some sort of thread context so Thread::Current works. */
     //thread_init_early();
@@ -81,9 +90,9 @@ fn lk_main(kernel_base_phys: usize, kernel_size: usize)
      * depends on ctors right now). */
     dprint!(ALWAYS, "printing enabled\n");
 
+    dprint!(ALWAYS, "params [{:x}, {:x}] dtb_phys: {:x} ... \n",
+            kernel_base_phys, kernel_size, ctx.dtb_pa);
     platform_early_init(&mut ctx)?;
-    dprint!(ALWAYS, "prepare memory[{:x}, {:x}] ... \n",
-            kernel_base_phys, kernel_size);
 
     Ok(())
 }

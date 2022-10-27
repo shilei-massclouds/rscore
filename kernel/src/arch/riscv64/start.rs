@@ -60,10 +60,8 @@ fn _start() -> ! {
          bnez a3, 2f",
 
         /* Save hart ID and DTB physical address */
-        "la a2, {BOOT_HARTID}
-         sd a0, (a2)
-         la a2, {DTB_PA}
-         sd a1, (a2)",
+        "mv s0, a0
+         mv s1, a1",
 
         /* Clear BSS for flat non-ELF images */
         "la a3, __bss_start
@@ -80,7 +78,9 @@ fn _start() -> ! {
          la sp, {boot_stack}
          add sp, sp, t0",
 
-        "j {start_kernel}",
+        "mv a0, s0
+         mv a1, s1
+         j {start_kernel}",
 
         /* For secondary start */
         "2:
@@ -95,8 +95,6 @@ fn _start() -> ! {
         NR_CPUS = const NR_CPUS,
         SR_FS = const SR_FS,
         HART_LOTTERY = sym crate::HART_LOTTERY,
-        BOOT_HARTID = sym crate::BOOT_HARTID,
-        DTB_PA = sym crate::DTB_PA,
         stack_size = const _CONFIG_STACK_SIZE,
         boot_stack = sym BOOT_STACK,
         start_kernel = sym start_kernel,
@@ -179,7 +177,7 @@ fn relocate_enable_mmu() {
 }
 
 unsafe extern "C"
-fn start_kernel() {
+fn start_kernel(hartid: usize, dtb_pa: usize) {
     /* map a large run of physical memory
      * at the base of the kernel's address space */
     let ret = riscv64_boot_map(&mut SWAPPER_PG_DIR,
@@ -213,7 +211,7 @@ fn start_kernel() {
     /* Set the per cpu pointer for cpu 0 */
 
     /* Enter main */
-    let ret = lk_main(kernel_base_phys, kernel_size);
+    let ret = lk_main(hartid, dtb_pa, kernel_base_phys, kernel_size);
     if let Err(errno) = ret {
         crate::dprint!(crate::CRITICAL, "Fatal: errno = {:?}\n", errno);
         /* Todo: panic */

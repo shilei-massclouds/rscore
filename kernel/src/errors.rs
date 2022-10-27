@@ -4,12 +4,15 @@
  * at https://opensource.org/licenses/MIT
  */
 
-pub enum Error {
+#[derive(Debug)]
+pub enum ErrNO {
     /* Indicates an operation was successful. */
-    OK,
+    _OK,
 
     /* The operation failed because the current state of the object
      * does not allow it, or a precondition of the operation
      * is not satisfied. */
     BadState,
+
+    BadRange,
 }

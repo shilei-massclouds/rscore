@@ -9,7 +9,7 @@ extern crate alloc;
 use core::cmp::min;
 use core::alloc::*;
 use super::defines::*;
-use crate::errors::Error;
+use crate::errors::ErrNO;
 
 /*
  * PTE format:
@@ -118,7 +118,7 @@ fn aligned_in_level(addr: usize, level: usize) -> bool {
 fn _boot_map<F1>(table: &mut PageTable, level: usize,
                  vaddr: usize, paddr: usize, len: usize,
                  prot: usize,
-                 phys_to_virt: &F1) -> Result<Error, Error>
+                 phys_to_virt: &F1) -> Result<(), ErrNO>
 where F1: Fn(usize) -> usize
 {
     let mut off = 0;
@@ -153,7 +153,7 @@ where F1: Fn(usize) -> usize
         }
         if table.item_leaf(index) {
             /* not legal as a leaf at this level */
-            return Err(Error::BadState);
+            return Err(ErrNO::BadState);
         }
 
         let lower_table_ptr = table.item_descend(index);
@@ -168,12 +168,12 @@ where F1: Fn(usize) -> usize
         off += LEVEL_SIZE!(level);
     }
 
-    return Ok(Error::OK);
+    Ok(())
 }
 
 pub fn riscv64_boot_map(table: &mut PageTable,
                         vaddr: usize, paddr: usize, len: usize,
-                        prot: usize) -> Result<Error, Error> {
+                        prot: usize) -> Result<(), ErrNO> {
     let phys_to_virt = |pa: usize| { pa };
 
     /* Loop through the virtual range and map each physical page,

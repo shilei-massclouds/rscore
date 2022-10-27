@@ -12,6 +12,7 @@ use super::mmu::{
     SWAPPER_SATP,
     PAGE_KERNEL, PAGE_KERNEL_EXEC
 };
+use crate::lk_main;
 use crate::config_generated::*;
 
 #[link_section = ".bss..page_aligned"]
@@ -190,14 +191,14 @@ fn start_kernel() {
 
     /* Symbol __code_start and _end comes from kernel.ld */
     let kernel_base_phys = __code_start as usize;
-    let kernel_size = (_end as usize) - kernel_base_phys +
-        BOOT_HEAP_SIZE;
+    let kernel_size = (_end as usize) - kernel_base_phys;
 
     /* map the kernel to a fixed address */
     /* map the boot heap that just follows kernel address */
     let ret = riscv64_boot_map(&mut SWAPPER_PG_DIR,
                                KERNEL_BASE,
-                               kernel_base_phys, kernel_size,
+                               kernel_base_phys,
+                               kernel_size+BOOT_HEAP_SIZE,
                                PAGE_KERNEL_EXEC);
     if let Err(_) = ret {
         return;
@@ -212,7 +213,11 @@ fn start_kernel() {
     /* Set the per cpu pointer for cpu 0 */
 
     /* Enter main */
-    crate::lk_main();
+    let ret = lk_main(kernel_base_phys, kernel_size);
+    if let Err(errno) = ret {
+        crate::dprint!(crate::CRITICAL, "Fatal: errno = {:?}\n", errno);
+        /* Todo: panic */
+    }
 }
 
 //unsafe extern "C"

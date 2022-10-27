@@ -26,12 +26,38 @@ mod align;
 #[path = "arch/riscv64/mod.rs"]
 mod arch;
 
+#[path = "platform/riscv/platform.rs"]
+mod platform;
+
 extern crate alloc;
 
 use core::sync::atomic::AtomicI32;
 use crate::arch::sbi::*;
+use crate::platform::platform_early_init;
 //use crate::kernel::thread::thread_init_early;
 use crate::lib::debuglog::debuglog::*;
+use alloc::vec::Vec;
+use crate::vm::bootreserve::{NUM_RESERVES, BootReserveRange};
+use crate::errors::ErrNO;
+
+pub struct BootContext {
+    kernel_base_phys: usize,
+    kernel_size: usize,
+    reserve_ranges: Vec<BootReserveRange>,
+}
+
+impl BootContext {
+    pub fn new(kernel_base_phys: usize,
+               kernel_size: usize) -> BootContext {
+
+        BootContext {
+            kernel_base_phys,
+            kernel_size,
+            reserve_ranges:
+                Vec::<BootReserveRange>::with_capacity(NUM_RESERVES),
+        }
+    }
+}
 
 static HART_LOTTERY: AtomicI32 = AtomicI32::new(0);
 
@@ -39,7 +65,10 @@ static BOOT_HARTID: usize = 0;
 static DTB_PA: usize = 0;
 
 /* called from arch code */
-fn lk_main() {
+fn lk_main(kernel_base_phys: usize, kernel_size: usize)
+    -> Result<(), ErrNO> {
+    let mut ctx = BootContext::new(kernel_base_phys, kernel_size);
+
     /* get us into some sort of thread context so Thread::Current works. */
     //thread_init_early();
 
@@ -51,5 +80,10 @@ fn lk_main() {
      * and global ctors finished (some of the printf machinery
      * depends on ctors right now). */
     dprint!(ALWAYS, "printing enabled\n");
-    dprint!(ALWAYS, "prepare memory[{}] ... \n", 8);
+
+    platform_early_init(&mut ctx)?;
+    dprint!(ALWAYS, "prepare memory[{:x}, {:x}] ... \n",
+            kernel_base_phys, kernel_size);
+
+    Ok(())
 }

@@ -9,6 +9,7 @@ pub enum ErrNO {
     /* Indicates an operation was successful. */
     _OK,
 
+    NullDTB,
     BadDTB,
 
     /* The operation failed because the current state of the object

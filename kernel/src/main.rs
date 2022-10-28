@@ -73,7 +73,7 @@ impl BootContext {
         pa + KERNEL_ASPACE_BASE
     }
 
-    fn kernel_pa_to_va(&self, pa: usize) -> usize {
+    fn _kernel_pa_to_va(&self, pa: usize) -> usize {
         pa + (KERNEL_BASE - self.kernel_base_phys)
     }
 }

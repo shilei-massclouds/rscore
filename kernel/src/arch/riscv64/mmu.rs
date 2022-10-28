@@ -70,11 +70,10 @@ impl PageTable {
 pub static mut SWAPPER_PG_DIR: PageTable = PageTable::ZERO;
 pub static mut SWAPPER_SATP: usize = 0;
 
-/*
+/* Todo: Check KERNEL_ASPACE_BITS < 57 because SV57 is
+ * the highest mode that is supported. */
 const MMU_LEVELS: usize =
-    (KERNEL_ASPACE_BITS - PAGE_SHIFT) / (PAGE_SHIFT - 3);
-    */
-const MMU_LEVELS: usize = 5;
+    (KERNEL_ASPACE_BITS - PAGE_SHIFT) / (PAGE_SHIFT - 3) + 1;
 
 macro_rules! LEVEL_SHIFT {
     ($level: expr) => {

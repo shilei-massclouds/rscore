@@ -50,10 +50,6 @@ pub struct PageTable([usize; PAGE_TABLE_ENTRIES]);
 impl PageTable {
     const ZERO: Self = Self([0usize; PAGE_TABLE_ENTRIES]);
 
-    fn clear(&mut self) {
-        self.0 = [0; PAGE_TABLE_ENTRIES];
-    }
-
     fn mk_item(&mut self, index: usize, pfn: usize, prot: usize) {
         self.0[index] = (pfn << _PAGE_PFN_SHIFT) | prot;
     }
@@ -74,8 +70,11 @@ impl PageTable {
 pub static mut SWAPPER_PG_DIR: PageTable = PageTable::ZERO;
 pub static mut SWAPPER_SATP: usize = 0;
 
+/*
 const MMU_LEVELS: usize =
     (KERNEL_ASPACE_BITS - PAGE_SHIFT) / (PAGE_SHIFT - 3);
+    */
+const MMU_LEVELS: usize = 5;
 
 macro_rules! LEVEL_SHIFT {
     ($level: expr) => {
@@ -147,7 +146,8 @@ where F1: Fn(usize) -> usize
 
             let layout = Layout::from_size_align(4096, 4096).unwrap();
             unsafe {
-                let pa: usize = alloc::alloc::alloc(layout) as usize;
+                let pa: usize =
+                    alloc::alloc::alloc_zeroed(layout) as usize;
                 table.mk_item(index, PA_TO_PFN!(pa), PAGE_TABLE);
             }
         }
@@ -159,7 +159,6 @@ where F1: Fn(usize) -> usize
         let lower_table_ptr = table.item_descend(index);
         let lower_len = min(LEVEL_SIZE!(level), len-off);
         unsafe {
-            (*lower_table_ptr).clear();
             _boot_map(&mut (*lower_table_ptr), level+1,
                       vaddr+off, paddr+off, lower_len,
                       prot, phys_to_virt)?;
@@ -188,6 +187,7 @@ pub unsafe fn riscv64_setup_mmu_mode()
     let pfn = (ptr as usize) >> PAGE_SHIFT;
 
     let mode = match MMU_LEVELS {
+        5 => SATP_MODE_57,
         4 => SATP_MODE_48,
         3 => SATP_MODE_39,
         _ => 0,

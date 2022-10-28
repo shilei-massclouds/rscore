@@ -4,7 +4,9 @@
  * at https://opensource.org/licenses/MIT
  */
 
-use crate::{BootContext, dprint, CRITICAL};
+use core::slice;
+
+use crate::{BootContext, dprint, CRITICAL, INFO};
 use crate::errors::ErrNO;
 use crate::vm::bootreserve::boot_reserve_init;
 
@@ -42,20 +44,15 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
 
 pub fn parse_dtb(ctx: &mut BootContext) -> Result<(), ErrNO> {
     /* Early scan of device tree from init memory */
-    dprint!(CRITICAL, "Hart-ID {} DTB pa 0x{:x}\n",
-            ctx.hartid, ctx.dtb_pa);
-    //early_init_dt_scan(DTB_PA)?;
-    /*
-    if (early_init_dt_scan(dtb_early_va)) {
-        const char *name = of_flat_dt_get_machine_name();
+    let dtb_va = ctx.pa_to_va(ctx.dtb_pa);
+    dprint!(CRITICAL, "HartID {:x} DTB 0x{:x} -> 0x{:x}\n",
+            ctx.hartid, ctx.dtb_pa, dtb_va);
 
-        if (name) {
-            pr_info("Machine model: %s\n", name);
-            dump_stack_set_arch_desc("%s (DT)", name);
-        }
-        return;
+    let magic_ptr = dtb_va as *const u32;
+    unsafe {
+        let a: u32 = *magic_ptr;
+        dprint!(INFO, "dtb magic 0x{:x}\n", a);
     }
-    */
 
     dprint!(CRITICAL, "No DTB passed to the kernel\n");
     Err(ErrNO::BadDTB)

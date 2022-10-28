@@ -30,6 +30,7 @@ pub const KERNEL_BASE: usize = _CONFIG_KERNEL_BASE;
 
 pub const SATP_MODE_39: usize = 0x8000000000000000;
 pub const SATP_MODE_48: usize = 0x9000000000000000;
+pub const SATP_MODE_57: usize = 0xa000000000000000;
 
 /* clang-format off */
 macro_rules! IFTE {

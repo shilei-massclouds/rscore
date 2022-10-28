@@ -33,6 +33,7 @@ extern crate alloc;
 
 use core::sync::atomic::AtomicI32;
 use crate::arch::sbi::*;
+use crate::arch::defines::*;
 use crate::platform::platform_early_init;
 //use crate::kernel::thread::thread_init_early;
 use crate::lib::debuglog::debuglog::*;
@@ -66,6 +67,14 @@ impl BootContext {
             mem_arena:
                 Vec::<ArenaInfo>::with_capacity(NUM_ARENAS),
         }
+    }
+
+    fn pa_to_va(&self, pa: usize) -> usize {
+        pa + KERNEL_ASPACE_BASE
+    }
+
+    fn kernel_pa_to_va(&self, pa: usize) -> usize {
+        pa + (KERNEL_BASE - self.kernel_base_phys)
     }
 }
 

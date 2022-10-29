@@ -4,11 +4,14 @@
  * at https://opensource.org/licenses/MIT
  */
 
-use crate::{BootContext, dprint, CRITICAL, INFO};
+use crate::{BootContext, dprint, CRITICAL, INFO, WARN};
 use crate::errors::ErrNO;
 use crate::vm::bootreserve::boot_reserve_init;
 use core::slice;
 use device_tree::DeviceTree;
+
+const OF_ROOT_NODE_SIZE_CELLS_DEFAULT: usize = 1;
+const OF_ROOT_NODE_ADDR_CELLS_DEFAULT: usize = 1;
 
 /* all of the configured memory arenas */
 pub const NUM_ARENAS: usize = 16;
@@ -56,7 +59,7 @@ const FDT_TOTALSIZE_OFFSET: usize = 4;
 
 fn early_init_dt_verify(dtb_va: usize) -> Result<(), ErrNO> {
     if dtb_va == 0 {
-        return Err(ErrNO::NullDTB);
+        return Err(ErrNO::NoDTB);
     }
 
     /* check device tree validity */
@@ -71,7 +74,6 @@ fn early_init_dt_load(dtb_va: usize) -> Result<DeviceTree, ErrNO> {
     early_init_dt_verify(dtb_va)?;
 
     let totalsize = fdt_get_u32(dtb_va, FDT_TOTALSIZE_OFFSET);
-    //dprint!(INFO, "dtb totalsize 0x{:x}\n", totalsize);
     unsafe {
         let buf = slice::from_raw_parts_mut(dtb_va as *mut u8,
                                             totalsize as usize);
@@ -87,9 +89,117 @@ fn early_init_dt_load(dtb_va: usize) -> Result<DeviceTree, ErrNO> {
     }
 }
 
+/*
+ * early_init_dt_scan_root - fetch the top level address and size cells
+ */
+fn early_init_dt_scan_root(dt: &DeviceTree) -> (usize, usize) {
+    let root = match dt.find("/") {
+        Some(node) => { node },
+        None => {
+            dprint!(CRITICAL, "Can't find root of this dtb!\n");
+            return (OF_ROOT_NODE_ADDR_CELLS_DEFAULT,
+                    OF_ROOT_NODE_SIZE_CELLS_DEFAULT);
+        }
+    };
+
+    let addr_cells = match root.prop_u32("#address-cells") {
+        Ok(v) => { v as usize },
+        _ => { OF_ROOT_NODE_ADDR_CELLS_DEFAULT }
+    };
+    dprint!(INFO, "dt_root_addr_cells = 0x{:x}\n", addr_cells);
+
+    let size_cells = match root.prop_u32("#size-cells") {
+        Ok(v) => { v as usize },
+        _ => { OF_ROOT_NODE_SIZE_CELLS_DEFAULT }
+    };
+    dprint!(INFO, "dt_root_size_cells = 0x{:x}\n", size_cells);
+
+    (addr_cells, size_cells)
+}
+
+fn early_init_dt_scan_chosen(dt: &DeviceTree) -> &str {
+    let chosen = match dt.find("/chosen") {
+        Some(node) => { node },
+        None => {
+            if let Some(node) = dt.find("/chosen@0") {
+                node
+            } else {
+                dprint!(WARN, "No chosen node found!\n");
+                return "";
+            }
+        }
+    };
+
+    /* Retrieve command line */
+    if let Ok(s) = chosen.prop_str("bootargs") {
+        return s;
+    }
+
+    ""
+}
+
+fn early_init_dt_add_memory_arch(base: usize, size: usize) {
+    dprint!(INFO, " - 0x{:x}, 0x{:x}\n", base, size);
+}
+
+/*
+ * early_init_dt_scan_memory - Look for and parse memory nodes
+ */
+fn early_init_dt_scan_memory(dt: &DeviceTree,
+                             addr_cells: usize, size_cells: usize) {
+    let root = match dt.find("/") {
+        Some(node) => { node },
+        None => { return; }
+    };
+
+    for child in &root.children {
+        /* We are scanning "memory" nodes only */
+        if let Ok(t) = child.prop_str("device_type") {
+            if t != "memory" {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        let mut pos = 0;
+        let reg_len = child.prop_len("reg");
+        while pos < reg_len {
+            let base = if addr_cells == 2 {
+                child.prop_u64_at("reg", pos).unwrap() as usize
+            } else {
+                child.prop_u32_at("reg", pos).unwrap() as usize
+            };
+            pos += addr_cells << 2;
+
+            let size = if size_cells == 2 {
+                child.prop_u64_at("reg", pos).unwrap() as usize
+            } else {
+                child.prop_u32_at("reg", pos).unwrap() as usize
+            };
+            pos += size_cells << 2;
+
+            if size == 0 {
+                continue;
+            }
+            dprint!(INFO, " - 0x{:x}, 0x{:x}\n", base, size);
+
+            early_init_dt_add_memory_arch(base, size);
+        }
+    }
+}
+
 fn early_init_dt_scan(dt: &DeviceTree) -> Result<(), ErrNO> {
-    dprint!(INFO, "device tree: {:?}\n", dt);
-    //early_init_dt_scan_nodes();
+    /* Initialize {size,address}-cells info */
+    let (addr_cells, size_cells) = early_init_dt_scan_root(dt);
+
+    /* Retrieve various information from the /chosen node */
+    let cmdline = early_init_dt_scan_chosen(dt);
+    dprint!(INFO, "command line = {}\n", cmdline);
+
+    /* Setup memory, calling early_init_dt_add_memory_arch */
+    early_init_dt_scan_memory(dt, addr_cells, size_cells);
+
     Ok(())
 }
 

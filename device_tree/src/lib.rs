@@ -299,6 +299,14 @@ impl Node {
         }
     }
 
+    pub fn prop_len(&self, name: &str) -> usize {
+        if let Some(v) = self.prop_raw(name) {
+            v.len()
+        } else {
+            0
+        }
+    }
+
     pub fn prop_str<'a>(&'a self, name: &str) -> Result<&'a str, PropError> {
         let raw = self.prop_raw(name).ok_or(PropError::NotFound)?;
 
@@ -319,16 +327,26 @@ impl Node {
         None
     }
 
-    pub fn prop_u64(&self, name: &str) -> Result<u64, PropError> {
+    pub fn prop_u64_at(&self, name: &str, pos: usize)
+        -> Result<u64, PropError> {
         let raw = self.prop_raw(name).ok_or(PropError::NotFound)?;
 
-        Ok(raw.as_slice().read_be_u64(0)?)
+        Ok(raw.as_slice().read_be_u64(pos)?)
+    }
+
+    pub fn prop_u64(&self, name: &str) -> Result<u64, PropError> {
+        self.prop_u64_at(name, 0)
+    }
+
+    pub fn prop_u32_at(&self, name: &str, pos: usize)
+        -> Result<u32, PropError> {
+        let raw = self.prop_raw(name).ok_or(PropError::NotFound)?;
+
+        Ok(raw.as_slice().read_be_u32(pos)?)
     }
 
     pub fn prop_u32(&self, name: &str) -> Result<u32, PropError> {
-        let raw = self.prop_raw(name).ok_or(PropError::NotFound)?;
-
-        Ok(raw.as_slice().read_be_u32(0)?)
+        self.prop_u32_at(name, 0)
     }
 }
 

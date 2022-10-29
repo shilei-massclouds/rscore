@@ -7,6 +7,8 @@
 use crate::{BootContext, dprint, CRITICAL, INFO};
 use crate::errors::ErrNO;
 use crate::vm::bootreserve::boot_reserve_init;
+use core::slice;
+use device_tree::DeviceTree;
 
 /* all of the configured memory arenas */
 pub const NUM_ARENAS: usize = 16;
@@ -65,15 +67,29 @@ fn early_init_dt_verify(dtb_va: usize) -> Result<(), ErrNO> {
     Ok(())
 }
 
-fn early_init_dt_scan(dtb_va: usize) -> Result<(), ErrNO> {
+fn early_init_dt_load(dtb_va: usize) -> Result<DeviceTree, ErrNO> {
     early_init_dt_verify(dtb_va)?;
 
     let totalsize = fdt_get_u32(dtb_va, FDT_TOTALSIZE_OFFSET);
-    dprint!(INFO, "dtb totalsize 0x{:x}\n", totalsize);
-    /*
-    early_init_dt_scan_nodes();
-    return true;
-    */
+    //dprint!(INFO, "dtb totalsize 0x{:x}\n", totalsize);
+    unsafe {
+        let buf = slice::from_raw_parts_mut(dtb_va as *mut u8,
+                                            totalsize as usize);
+        match DeviceTree::load(buf) {
+            Err(e) => {
+                dprint!(CRITICAL, "Can't load dtb: {:?}\n", e);
+                Err(ErrNO::BadDTB)
+            },
+            Ok(dt) => {
+                Ok(dt)
+            }
+        }
+    }
+}
+
+fn early_init_dt_scan(dt: &DeviceTree) -> Result<(), ErrNO> {
+    dprint!(INFO, "device tree: {:?}\n", dt);
+    //early_init_dt_scan_nodes();
     Ok(())
 }
 
@@ -83,7 +99,9 @@ pub fn parse_dtb(ctx: &mut BootContext) -> Result<(), ErrNO> {
     dprint!(CRITICAL, "HartID {:x} DTB 0x{:x} -> 0x{:x}\n",
             ctx.hartid, ctx.dtb_pa, dtb_va);
 
-    early_init_dt_scan(dtb_va)?;
+    let dt = early_init_dt_load(dtb_va)?;
+
+    early_init_dt_scan(&dt)?;
 
     dprint!(CRITICAL, "No DTB passed to the kernel\n");
     Err(ErrNO::BadDTB)

@@ -1,5 +1,5 @@
 [workspace]
-members = ["xtask", "kernel"]
+members = ["xtask", "kernel", "device_tree"]
 default-members = ["xtask"]
 
 [profile.release]

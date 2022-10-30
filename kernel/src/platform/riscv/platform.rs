@@ -4,14 +4,17 @@
  * at https://opensource.org/licenses/MIT
  */
 
-use crate::{BootContext, dprint, CRITICAL, INFO, WARN};
+use crate::{
+    BootContext, dprint, CRITICAL, INFO, WARN,
+    ZBIMemRange, ZBI_MEM_RANGE_PERIPHERAL,
+};
 use crate::errors::ErrNO;
 use crate::vm::bootreserve::boot_reserve_init;
 use core::slice;
 use device_tree::DeviceTree;
 
-const OF_ROOT_NODE_SIZE_CELLS_DEFAULT: usize = 1;
-const OF_ROOT_NODE_ADDR_CELLS_DEFAULT: usize = 1;
+const OF_ROOT_NODE_SIZE_CELLS_DEFAULT: u32 = 1;
+const OF_ROOT_NODE_ADDR_CELLS_DEFAULT: u32 = 1;
 
 /* all of the configured memory arenas */
 pub const NUM_ARENAS: usize = 16;
@@ -33,6 +36,8 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
     /* discover memory ranges */
     parse_dtb(ctx)?;
 
+    init_mem_config_arch(ctx)?;
+
     /* find memory ranges to use if one is found. */
     /*
     for (size_t i = 0; i < arena_count; i++) {
@@ -42,6 +47,22 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
     }
     */
 
+    dprint!(INFO, "platform early init ok!\n");
+    Ok(())
+}
+
+fn init_mem_config_arch(ctx: &mut BootContext) -> Result<(), ErrNO> {
+    ctx.mem_config.push(ZBIMemRange {
+        mtype: ZBI_MEM_RANGE_PERIPHERAL,
+        paddr: 0,
+        length: 0x40000000,
+        reserved: 0,
+    });
+
+    Ok(())
+}
+
+fn process_mem_ranges(ctx: &BootContext) -> Result<(), ErrNO> {
     Ok(())
 }
 
@@ -59,11 +80,13 @@ const FDT_TOTALSIZE_OFFSET: usize = 4;
 
 fn early_init_dt_verify(dtb_va: usize) -> Result<(), ErrNO> {
     if dtb_va == 0 {
+        dprint!(CRITICAL, "No DTB passed to the kernel\n");
         return Err(ErrNO::NoDTB);
     }
 
     /* check device tree validity */
     if fdt_get_u32(dtb_va, FDT_MAGIC_OFFSET) != FDT_MAGIC {
+        dprint!(CRITICAL, "Bad DTB passed to the kernel\n");
         return Err(ErrNO::BadDTB);
     }
 
@@ -71,28 +94,24 @@ fn early_init_dt_verify(dtb_va: usize) -> Result<(), ErrNO> {
 }
 
 fn early_init_dt_load(dtb_va: usize) -> Result<DeviceTree, ErrNO> {
+
     early_init_dt_verify(dtb_va)?;
 
     let totalsize = fdt_get_u32(dtb_va, FDT_TOTALSIZE_OFFSET);
     unsafe {
         let buf = slice::from_raw_parts_mut(dtb_va as *mut u8,
                                             totalsize as usize);
-        match DeviceTree::load(buf) {
-            Err(e) => {
-                dprint!(CRITICAL, "Can't load dtb: {:?}\n", e);
-                Err(ErrNO::BadDTB)
-            },
-            Ok(dt) => {
-                Ok(dt)
-            }
-        }
+        DeviceTree::load(buf).or_else(|e| {
+            dprint!(CRITICAL, "Can't load dtb: {:?}\n", e);
+            Err(ErrNO::BadDTB)
+        })
     }
 }
 
 /*
  * early_init_dt_scan_root - fetch the top level address and size cells
  */
-fn early_init_dt_scan_root(dt: &DeviceTree) -> (usize, usize) {
+fn early_init_dt_scan_root(dt: &DeviceTree) -> (u32, u32) {
     let root = match dt.find("/") {
         Some(node) => { node },
         None => {
@@ -102,16 +121,12 @@ fn early_init_dt_scan_root(dt: &DeviceTree) -> (usize, usize) {
         }
     };
 
-    let addr_cells = match root.prop_u32("#address-cells") {
-        Ok(v) => { v as usize },
-        _ => { OF_ROOT_NODE_ADDR_CELLS_DEFAULT }
-    };
+    let addr_cells = root.prop_u32("#address-cells")
+        .unwrap_or_else(|_| OF_ROOT_NODE_ADDR_CELLS_DEFAULT);
     dprint!(INFO, "dt_root_addr_cells = 0x{:x}\n", addr_cells);
 
-    let size_cells = match root.prop_u32("#size-cells") {
-        Ok(v) => { v as usize },
-        _ => { OF_ROOT_NODE_SIZE_CELLS_DEFAULT }
-    };
+    let size_cells = root.prop_u32("#size-cells")
+        .unwrap_or_else(|_| OF_ROOT_NODE_SIZE_CELLS_DEFAULT);
     dprint!(INFO, "dt_root_size_cells = 0x{:x}\n", size_cells);
 
     (addr_cells, size_cells)
@@ -146,11 +161,10 @@ fn early_init_dt_add_memory_arch(base: usize, size: usize) {
  * early_init_dt_scan_memory - Look for and parse memory nodes
  */
 fn early_init_dt_scan_memory(dt: &DeviceTree,
-                             addr_cells: usize, size_cells: usize) {
-    let root = match dt.find("/") {
-        Some(node) => { node },
-        None => { return; }
-    };
+                             addr_cells: u32, size_cells: u32)
+    -> Result<(), ErrNO> {
+
+    let root = dt.find("/").ok_or_else(|| ErrNO::BadDTB)?;
 
     for child in &root.children {
         /* We are scanning "memory" nodes only */
@@ -170,14 +184,14 @@ fn early_init_dt_scan_memory(dt: &DeviceTree,
             } else {
                 child.prop_u32_at("reg", pos).unwrap() as usize
             };
-            pos += addr_cells << 2;
+            pos += (addr_cells << 2) as usize;
 
             let size = if size_cells == 2 {
                 child.prop_u64_at("reg", pos).unwrap() as usize
             } else {
                 child.prop_u32_at("reg", pos).unwrap() as usize
             };
-            pos += size_cells << 2;
+            pos += (size_cells << 2) as usize;
 
             if size == 0 {
                 continue;
@@ -187,6 +201,8 @@ fn early_init_dt_scan_memory(dt: &DeviceTree,
             early_init_dt_add_memory_arch(base, size);
         }
     }
+
+    Ok(())
 }
 
 fn early_init_dt_scan(dt: &DeviceTree) -> Result<(), ErrNO> {
@@ -198,9 +214,7 @@ fn early_init_dt_scan(dt: &DeviceTree) -> Result<(), ErrNO> {
     dprint!(INFO, "command line = {}\n", cmdline);
 
     /* Setup memory, calling early_init_dt_add_memory_arch */
-    early_init_dt_scan_memory(dt, addr_cells, size_cells);
-
-    Ok(())
+    early_init_dt_scan_memory(dt, addr_cells, size_cells)
 }
 
 pub fn parse_dtb(ctx: &mut BootContext) -> Result<(), ErrNO> {
@@ -211,8 +225,5 @@ pub fn parse_dtb(ctx: &mut BootContext) -> Result<(), ErrNO> {
 
     let dt = early_init_dt_load(dtb_va)?;
 
-    early_init_dt_scan(&dt)?;
-
-    dprint!(CRITICAL, "No DTB passed to the kernel\n");
-    Err(ErrNO::BadDTB)
+    early_init_dt_scan(&dt)
 }

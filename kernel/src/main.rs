@@ -42,12 +42,26 @@ use crate::vm::bootreserve::{NUM_RESERVES, BootReserveRange};
 use crate::platform::{NUM_ARENAS, ArenaInfo};
 use crate::errors::ErrNO;
 
+struct ZBIMemRange {
+    paddr:      u64,
+    length:     u64,
+    mtype:      u32,
+    reserved:   u32,
+}
+
+const NUM_ZBI_MEM_RANGES: usize = 32;
+
+const ZBI_MEM_RANGE_RAM:        u32 = 1;
+const ZBI_MEM_RANGE_PERIPHERAL: u32 = 2;
+const ZBI_MEM_RANGE_RESERVED:   u32 = 3;
+
 pub struct BootContext {
     hartid: usize,
     dtb_pa: usize,
     kernel_base_phys: usize,
     kernel_size: usize,
     reserve_ranges: Vec<BootReserveRange>,
+    mem_config: Vec<ZBIMemRange>,
     mem_arena: Vec<ArenaInfo>,
 }
 
@@ -64,6 +78,8 @@ impl BootContext {
             kernel_size,
             reserve_ranges:
                 Vec::<BootReserveRange>::with_capacity(NUM_RESERVES),
+            mem_config:
+                Vec::<ZBIMemRange>::with_capacity(NUM_ZBI_MEM_RANGES),
             mem_arena:
                 Vec::<ArenaInfo>::with_capacity(NUM_ARENAS),
         }

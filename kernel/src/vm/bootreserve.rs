@@ -9,7 +9,7 @@ use crate::{
 };
 use crate::errors::ErrNO;
 
-pub const NUM_RESERVES: usize = 64;
+pub const MAX_RESERVES: usize = 64;
 
 #[derive(Copy, Clone)]
 pub struct BootReserveRange {

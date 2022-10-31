@@ -6,27 +6,40 @@
 
 use crate::{
     BootContext, dprint, CRITICAL, INFO, WARN,
-    ZBIMemRange, ZBI_MEM_RANGE_PERIPHERAL,
 };
 use crate::errors::ErrNO;
 use crate::vm::bootreserve::boot_reserve_init;
+use crate::vm::physmap::paddr_to_physmap;
 use core::slice;
+use alloc::vec::Vec;
 use device_tree::DeviceTree;
+use crate::boot::image::*;
+use crate::arch::periphmap::add_periph_range;
+
+type ZBIMemRangeVec = Vec<ZBIMemRange>;
 
 const OF_ROOT_NODE_SIZE_CELLS_DEFAULT: u32 = 1;
 const OF_ROOT_NODE_ADDR_CELLS_DEFAULT: u32 = 1;
 
 /* all of the configured memory arenas */
-pub const NUM_ARENAS: usize = 16;
+pub const MAX_ARENAS: usize = 16;
 
 #[derive(Copy, Clone)]
-pub struct ArenaInfo {
-    name: [char; 16],
-
-    flags: usize,
-
+pub struct ArenaInfo<'a> {
+    name: &'a str,
+    flags: u32,
     base: usize,
     size: usize,
+}
+
+impl<'a> ArenaInfo<'a> {
+    pub fn new(name: &str, flags: u32, base: usize, size: usize)
+        -> ArenaInfo {
+
+        ArenaInfo {
+            name, flags, base, size
+        }
+    }
 }
 
 pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
@@ -34,36 +47,65 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
     boot_reserve_init(ctx)?;
 
     /* discover memory ranges */
-    parse_dtb(ctx)?;
+    let mut mem_config = parse_dtb(ctx)?;
 
-    init_mem_config_arch(ctx)?;
+    init_mem_config_arch(&mut mem_config);
 
-    /* find memory ranges to use if one is found. */
-    /*
-    for (size_t i = 0; i < arena_count; i++) {
-        if (!have_limit || status != ZX_OK) {
-            pmm_add_arena(&mem_arena[i]);
-        }
+    process_mem_ranges(ctx, mem_config)?;
+
+    for range in &(ctx.mem_arenas) {
+        dprint!(INFO, "Arena.{}: flags[{:x}] {:x} {:x}\n",
+                range.name, range.flags, range.base, range.size);
     }
-    */
+
+    for range in &(ctx.periph_ranges) {
+        dprint!(INFO, "PERIPH: {:x} -> {:x}, {:x}\n",
+                range.base_phys, range.base_virt, range.length);
+    }
 
     dprint!(INFO, "platform early init ok!\n");
     Ok(())
 }
 
-fn init_mem_config_arch(ctx: &mut BootContext) -> Result<(), ErrNO> {
-    ctx.mem_config.push(ZBIMemRange {
-        mtype: ZBI_MEM_RANGE_PERIPHERAL,
-        paddr: 0,
-        length: 0x40000000,
-        reserved: 0,
-    });
+fn process_mem_ranges(ctx: &mut BootContext<'_>,
+                      mem_config: Vec<ZBIMemRange>)
+    -> Result<(), ErrNO> {
+
+    for range in mem_config {
+        match &(range.mtype) {
+            ZBIMemRangeType::RAM => {
+                dprint!(INFO, "ZBI: mem arena {:x} - {:x}\n",
+                        range.paddr, range.length);
+
+                if ctx.mem_arenas.len() >= MAX_ARENAS {
+                    dprint!(CRITICAL,
+                            "ZBI: too many memory arenas,
+                             dropping additional\n");
+                    break;
+                }
+                ctx.mem_arenas.push(
+                    ArenaInfo::new("ram", 0, range.paddr, range.length)
+                );
+            },
+            ZBIMemRangeType::PERIPHERAL => {
+                dprint!(INFO, "ZBI: peripheral range {:x} - {:x}\n",
+                        range.paddr, range.length);
+                add_periph_range(ctx, range.paddr, range.length)?;
+            },
+            ZBIMemRangeType::_RESERVED => {
+                dprint!(WARN, "FIND RESERVED Memory Range {:x} {:x}!\n",
+                        range.paddr, range.length);
+            }
+        }
+    }
 
     Ok(())
 }
 
-fn process_mem_ranges(ctx: &BootContext) -> Result<(), ErrNO> {
-    Ok(())
+fn init_mem_config_arch(config: &mut Vec<ZBIMemRange>) {
+    config.push(
+        ZBIMemRange::new(ZBIMemRangeType::PERIPHERAL, 0, 0x40000000)
+    );
 }
 
 fn fdt_get_u32(dtb_va: usize, offset: usize) -> u32 {
@@ -153,8 +195,9 @@ fn early_init_dt_scan_chosen(dt: &DeviceTree) -> &str {
     ""
 }
 
-fn early_init_dt_add_memory_arch(base: usize, size: usize) {
-    dprint!(INFO, " - 0x{:x}, 0x{:x}\n", base, size);
+fn early_init_dt_add_memory_arch(config: &mut Vec<ZBIMemRange>,
+                                 base: usize, size: usize) {
+    config.push(ZBIMemRange::new(ZBIMemRangeType::RAM, base, size));
 }
 
 /*
@@ -162,9 +205,12 @@ fn early_init_dt_add_memory_arch(base: usize, size: usize) {
  */
 fn early_init_dt_scan_memory(dt: &DeviceTree,
                              addr_cells: u32, size_cells: u32)
-    -> Result<(), ErrNO> {
+    -> Result<ZBIMemRangeVec, ErrNO> {
 
     let root = dt.find("/").ok_or_else(|| ErrNO::BadDTB)?;
+
+    let mut mem_config =
+        Vec::<ZBIMemRange>::with_capacity(MAX_ZBI_MEM_RANGES);
 
     for child in &root.children {
         /* We are scanning "memory" nodes only */
@@ -198,14 +244,16 @@ fn early_init_dt_scan_memory(dt: &DeviceTree,
             }
             dprint!(INFO, " - 0x{:x}, 0x{:x}\n", base, size);
 
-            early_init_dt_add_memory_arch(base, size);
+            early_init_dt_add_memory_arch(&mut mem_config, base, size);
         }
     }
 
-    Ok(())
+    Ok(mem_config)
 }
 
-fn early_init_dt_scan(dt: &DeviceTree) -> Result<(), ErrNO> {
+fn early_init_dt_scan(dt: &DeviceTree)
+    -> Result<ZBIMemRangeVec, ErrNO> {
+
     /* Initialize {size,address}-cells info */
     let (addr_cells, size_cells) = early_init_dt_scan_root(dt);
 
@@ -217,9 +265,11 @@ fn early_init_dt_scan(dt: &DeviceTree) -> Result<(), ErrNO> {
     early_init_dt_scan_memory(dt, addr_cells, size_cells)
 }
 
-pub fn parse_dtb(ctx: &mut BootContext) -> Result<(), ErrNO> {
+pub fn parse_dtb(ctx: &mut BootContext)
+    -> Result<ZBIMemRangeVec, ErrNO> {
+
     /* Early scan of device tree from init memory */
-    let dtb_va = ctx.pa_to_va(ctx.dtb_pa);
+    let dtb_va = paddr_to_physmap(ctx.dtb_pa);
     dprint!(CRITICAL, "HartID {:x} DTB 0x{:x} -> 0x{:x}\n",
             ctx.hartid, ctx.dtb_pa, dtb_va);
 

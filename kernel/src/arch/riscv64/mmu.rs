@@ -10,6 +10,7 @@ use core::cmp::min;
 use core::alloc::*;
 use super::defines::*;
 use crate::errors::ErrNO;
+use crate::vm::physmap::paddr_to_physmap;
 
 /*
  * PTE format:
@@ -41,6 +42,12 @@ pub const PAGE_KERNEL: usize =
     _PAGE_GLOBAL | _PAGE_ACCESSED | _PAGE_DIRTY;
 
 pub const PAGE_KERNEL_EXEC : usize = PAGE_KERNEL | _PAGE_EXEC;
+
+/*
+ * The RISC-V ISA doesn't yet specify how to query or modify PMAs,
+ * so we can't change the properties of memory regions.
+ */
+pub const PAGE_IOREMAP: usize = PAGE_KERNEL;
 
 const PAGE_TABLE_ENTRIES: usize = 1 << (PAGE_SHIFT - 3);
 
@@ -169,15 +176,36 @@ where F1: Fn(usize) -> usize
     Ok(())
 }
 
-pub fn riscv64_boot_map(table: &mut PageTable,
-                        vaddr: usize, paddr: usize, len: usize,
+pub fn riscv64_boot_map(vaddr: usize, paddr: usize, len: usize,
                         prot: usize) -> Result<(), ErrNO> {
     let phys_to_virt = |pa: usize| { pa };
 
     /* Loop through the virtual range and map each physical page,
      * using the largest page size supported.
      * Allocates necessar page tables along the way. */
-    _boot_map(table, 0, vaddr, paddr, len, prot, &mut &phys_to_virt)
+    unsafe {
+        _boot_map(&mut SWAPPER_PG_DIR, 0,
+                  vaddr, paddr, len, prot, &mut &phys_to_virt)
+    }
+}
+
+/*
+ * called a bit later in the boot process once the kernel is
+ * in virtual memory to map early kernel data.
+ */
+pub fn riscv64_boot_map_v(vaddr: usize, paddr: usize, len: usize,
+                          prot: usize) -> Result<(), ErrNO> {
+    /* assumed to be running with virtual memory enabled,
+     * so use a slightly different set of routines to allocate
+     * and find the virtual mapping of memory */
+    let phys_to_virt = |pa: usize| { paddr_to_physmap(pa) };
+
+    crate::dprint!(crate::INFO, "vaddr {:x} paddr {:x} len {:x}\n",
+                   vaddr, paddr, len);
+    unsafe {
+        _boot_map(&mut SWAPPER_PG_DIR, 0,
+                  vaddr, paddr, len, prot, &mut &phys_to_virt)
+    }
 }
 
 pub unsafe fn riscv64_setup_mmu_mode()

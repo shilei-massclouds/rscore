@@ -8,7 +8,7 @@ use core::arch::asm;
 use super::csr::*;
 use super::defines::*;
 use super::mmu::{
-    riscv64_boot_map, riscv64_setup_mmu_mode, SWAPPER_PG_DIR,
+    riscv64_boot_map, riscv64_setup_mmu_mode,
     SWAPPER_SATP,
     PAGE_KERNEL, PAGE_KERNEL_EXEC
 };
@@ -180,8 +180,7 @@ unsafe extern "C"
 fn start_kernel(hartid: usize, dtb_pa: usize) {
     /* map a large run of physical memory
      * at the base of the kernel's address space */
-    let ret = riscv64_boot_map(&mut SWAPPER_PG_DIR,
-                               KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE,
+    let ret = riscv64_boot_map(KERNEL_ASPACE_BASE, 0, ARCH_PHYSMAP_SIZE,
                                PAGE_KERNEL);
     if let Err(_) = ret {
         return;
@@ -193,8 +192,7 @@ fn start_kernel(hartid: usize, dtb_pa: usize) {
 
     /* map the kernel to a fixed address */
     /* map the boot heap that just follows kernel address */
-    let ret = riscv64_boot_map(&mut SWAPPER_PG_DIR,
-                               KERNEL_BASE,
+    let ret = riscv64_boot_map(KERNEL_BASE,
                                kernel_base_phys,
                                kernel_size+BOOT_HEAP_SIZE,
                                PAGE_KERNEL_EXEC);

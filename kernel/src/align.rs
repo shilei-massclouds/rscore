@@ -15,6 +15,16 @@ macro_rules! ALIGN {
 }
 
 #[macro_export]
+macro_rules! IS_ALIGNED {
+    ($a: expr, $b: expr) => {((($a) & (($b) - 1)) == 0)}
+}
+
+#[macro_export]
 macro_rules! PAGE_ALIGN {
     ($a: expr) => {ALIGN!($a, PAGE_SIZE)}
+}
+
+#[macro_export]
+macro_rules! IS_PAGE_ALIGNED {
+    ($x: expr) => {IS_ALIGNED!($x, PAGE_SIZE)}
 }

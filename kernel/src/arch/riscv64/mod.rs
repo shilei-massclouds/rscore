@@ -4,3 +4,4 @@ mod mmu;
 mod mp;
 pub mod sbi;
 pub mod defines;
+pub mod periphmap;

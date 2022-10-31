@@ -9,7 +9,10 @@ pub enum ErrNO {
     /* Indicates an operation was successful. */
     _OK,
 
-    NoDev,
+    //NoDev,
+
+    BadAlign,
+    OutOfRange,
 
     NoDTB,
     BadDTB,

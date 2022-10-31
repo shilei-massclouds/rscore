@@ -16,6 +16,7 @@
 mod lang;
 mod errors;
 mod lib;
+mod boot;
 //mod kernel;
 mod vm;
 mod config_generated;
@@ -38,38 +39,28 @@ use crate::platform::platform_early_init;
 //use crate::kernel::thread::thread_init_early;
 use crate::lib::debuglog::debuglog::*;
 use alloc::vec::Vec;
-use crate::vm::bootreserve::{NUM_RESERVES, BootReserveRange};
-use crate::platform::{NUM_ARENAS, ArenaInfo};
+use crate::vm::bootreserve::{MAX_RESERVES, BootReserveRange};
+use crate::platform::{MAX_ARENAS, ArenaInfo};
 use crate::errors::ErrNO;
+use crate::arch::periphmap::{PeriphRange, MAX_PERIPH_RANGES};
 
-struct ZBIMemRange {
-    paddr:      u64,
-    length:     u64,
-    mtype:      u32,
-    reserved:   u32,
-}
-
-const NUM_ZBI_MEM_RANGES: usize = 32;
-
-const ZBI_MEM_RANGE_RAM:        u32 = 1;
-const ZBI_MEM_RANGE_PERIPHERAL: u32 = 2;
-const ZBI_MEM_RANGE_RESERVED:   u32 = 3;
-
-pub struct BootContext {
+pub struct BootContext<'a> {
     hartid: usize,
     dtb_pa: usize,
     kernel_base_phys: usize,
     kernel_size: usize,
     reserve_ranges: Vec<BootReserveRange>,
-    mem_config: Vec<ZBIMemRange>,
-    mem_arena: Vec<ArenaInfo>,
+    mem_arenas: Vec<ArenaInfo<'a>>,
+    /* peripheral ranges are allocated below the kernel image. */
+    periph_ranges: Vec<PeriphRange>,
+    periph_base_virt: usize,
 }
 
-impl BootContext {
+impl<'a> BootContext<'a> {
     pub fn new(hartid: usize,
                dtb_pa: usize,
                kernel_base_phys: usize,
-               kernel_size: usize) -> BootContext {
+               kernel_size: usize) -> BootContext<'a> {
 
         BootContext {
             hartid,
@@ -77,16 +68,13 @@ impl BootContext {
             kernel_base_phys,
             kernel_size,
             reserve_ranges:
-                Vec::<BootReserveRange>::with_capacity(NUM_RESERVES),
-            mem_config:
-                Vec::<ZBIMemRange>::with_capacity(NUM_ZBI_MEM_RANGES),
-            mem_arena:
-                Vec::<ArenaInfo>::with_capacity(NUM_ARENAS),
+                Vec::<BootReserveRange>::with_capacity(MAX_RESERVES),
+            mem_arenas:
+                Vec::<ArenaInfo>::with_capacity(MAX_ARENAS),
+            periph_ranges:
+                Vec::<PeriphRange>::with_capacity(MAX_PERIPH_RANGES),
+            periph_base_virt: 0,
         }
-    }
-
-    fn pa_to_va(&self, pa: usize) -> usize {
-        pa + KERNEL_ASPACE_BASE
     }
 
     fn _kernel_pa_to_va(&self, pa: usize) -> usize {

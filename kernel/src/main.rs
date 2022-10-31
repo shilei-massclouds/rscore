@@ -15,6 +15,7 @@
 
 mod lang;
 mod errors;
+mod types;
 mod lib;
 mod boot;
 //mod kernel;
@@ -40,26 +41,27 @@ use crate::platform::platform_early_init;
 use crate::lib::debuglog::debuglog::*;
 use alloc::vec::Vec;
 use crate::vm::bootreserve::{MAX_RESERVES, BootReserveRange};
-use crate::platform::{MAX_ARENAS, ArenaInfo};
+use crate::vm::pmm::{MAX_ARENAS, ArenaInfo};
 use crate::errors::ErrNO;
 use crate::arch::periphmap::{PeriphRange, MAX_PERIPH_RANGES};
+use types::*;
 
 pub struct BootContext<'a> {
     hartid: usize,
-    dtb_pa: usize,
-    kernel_base_phys: usize,
+    dtb_pa: paddr_t,
+    kernel_base_phys: paddr_t,
     kernel_size: usize,
     reserve_ranges: Vec<BootReserveRange>,
     mem_arenas: Vec<ArenaInfo<'a>>,
     /* peripheral ranges are allocated below the kernel image. */
     periph_ranges: Vec<PeriphRange>,
-    periph_base_virt: usize,
+    periph_base_virt: vaddr_t,
 }
 
 impl<'a> BootContext<'a> {
     pub fn new(hartid: usize,
-               dtb_pa: usize,
-               kernel_base_phys: usize,
+               dtb_pa: paddr_t,
+               kernel_base_phys: paddr_t,
                kernel_size: usize) -> BootContext<'a> {
 
         BootContext {
@@ -85,8 +87,8 @@ impl<'a> BootContext<'a> {
 static HART_LOTTERY: AtomicI32 = AtomicI32::new(0);
 
 /* called from arch code */
-fn lk_main(hartid: usize, dtb_pa: usize,
-           kernel_base_phys: usize, kernel_size: usize)
+fn lk_main(hartid: usize, dtb_pa: paddr_t,
+           kernel_base_phys: paddr_t, kernel_size: usize)
     -> Result<(), ErrNO> {
     let mut ctx = BootContext::new(hartid, dtb_pa,
                                    kernel_base_phys, kernel_size);

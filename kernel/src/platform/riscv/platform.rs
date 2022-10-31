@@ -10,6 +10,7 @@ use crate::{
 use crate::errors::ErrNO;
 use crate::vm::bootreserve::boot_reserve_init;
 use crate::vm::physmap::paddr_to_physmap;
+use crate::vm::pmm::{MAX_ARENAS, ArenaInfo, pmm_add_arena};
 use core::slice;
 use alloc::vec::Vec;
 use device_tree::DeviceTree;
@@ -21,41 +22,24 @@ type ZBIMemRangeVec = Vec<ZBIMemRange>;
 const OF_ROOT_NODE_SIZE_CELLS_DEFAULT: u32 = 1;
 const OF_ROOT_NODE_ADDR_CELLS_DEFAULT: u32 = 1;
 
-/* all of the configured memory arenas */
-pub const MAX_ARENAS: usize = 16;
+fn process_phys_handoff(ctx: &mut BootContext) -> Result<(), ErrNO> {
+    /* discover memory ranges */
+    let mut mem_config = parse_dtb(ctx)?;
 
-#[derive(Copy, Clone)]
-pub struct ArenaInfo<'a> {
-    name: &'a str,
-    flags: u32,
-    base: usize,
-    size: usize,
-}
+    init_mem_config_arch(&mut mem_config);
 
-impl<'a> ArenaInfo<'a> {
-    pub fn new(name: &str, flags: u32, base: usize, size: usize)
-        -> ArenaInfo {
-
-        ArenaInfo {
-            name, flags, base, size
-        }
-    }
+    process_mem_ranges(ctx, mem_config)
 }
 
 pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
     /* initialize the boot memory reservation system */
     boot_reserve_init(ctx)?;
 
-    /* discover memory ranges */
-    let mut mem_config = parse_dtb(ctx)?;
+    process_phys_handoff(ctx)?;
 
-    init_mem_config_arch(&mut mem_config);
-
-    process_mem_ranges(ctx, mem_config)?;
-
+    /* find memory ranges to use if one is found. */
     for range in &(ctx.mem_arenas) {
-        dprint!(INFO, "Arena.{}: flags[{:x}] {:x} {:x}\n",
-                range.name, range.flags, range.base, range.size);
+        pmm_add_arena(&range);
     }
 
     for range in &(ctx.periph_ranges) {
@@ -63,8 +47,14 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
                 range.base_phys, range.base_virt, range.length);
     }
 
+    /* tell the boot allocator to mark ranges we've reserved. */
+    boot_reserve_wire();
+
     dprint!(INFO, "platform early init ok!\n");
     Ok(())
+}
+
+fn boot_reserve_wire() {
 }
 
 fn process_mem_ranges(ctx: &mut BootContext<'_>,

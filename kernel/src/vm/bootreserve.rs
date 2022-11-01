@@ -4,22 +4,25 @@
  * at https://opensource.org/licenses/MIT
  */
 
+use alloc::vec::Vec;
 use crate::{
-    dprint, INFO, BootContext,
+    dprint, INFO, paddr_t,
 };
 use crate::errors::ErrNO;
 
 pub const MAX_RESERVES: usize = 64;
 
-#[derive(Copy, Clone)]
+#[derive(Default)]
 pub struct BootReserveRange {
-    pa: usize,
-    len: usize,
+    pub pa: usize,
+    pub len: usize,
 }
 
-pub fn boot_reserve_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
+pub fn boot_reserve_init(pa: paddr_t, len: usize,
+                         ranges: &mut Vec<BootReserveRange>)
+    -> Result<(), ErrNO> {
     /* add the kernel to the boot reserve list */
-    boot_reserve_add_range(ctx.kernel_base_phys, ctx.kernel_size, ctx)
+    boot_reserve_add_range(pa, len, ranges)
 }
 
 /* given two offset/length pairs, determine if they overlap at all */
@@ -44,7 +47,8 @@ fn intersects(offset1: usize, len1: usize,
     true
 }
 
-fn boot_reserve_add_range(pa: usize, len: usize, ctx: &mut BootContext)
+fn boot_reserve_add_range(pa: usize, len: usize,
+                          ranges: &mut Vec<BootReserveRange>)
     -> Result<(), ErrNO> {
 
     dprint!(INFO, "PMM: boot reserve add [0x{:x}, 0x{:x}]\n",
@@ -54,14 +58,12 @@ fn boot_reserve_add_range(pa: usize, len: usize, ctx: &mut BootContext)
 
     /* insert into the list, sorted */
     let mut i = 0;
-    while i < ctx.reserve_ranges.len() {
-        if intersects(ctx.reserve_ranges[i].pa,
-                      ctx.reserve_ranges[i].len,
-                      pa, len) {
+    while i < ranges.len() {
+        if intersects(ranges[i].pa, ranges[i].len, pa, len) {
             return Err(ErrNO::BadRange);
         }
 
-        if ctx.reserve_ranges[i].pa > end {
+        if ranges[i].pa > end {
             break;
         }
 
@@ -69,8 +71,50 @@ fn boot_reserve_add_range(pa: usize, len: usize, ctx: &mut BootContext)
     }
 
     let range = BootReserveRange{pa: pa, len: len};
-    ctx.reserve_ranges.insert(i, range);
+    ranges.insert(i, range);
 
-    dprint!(INFO, "Boot reserve #range {}\n", ctx.reserve_ranges.len());
+    dprint!(INFO, "Boot reserve #range {}\n", ranges.len());
+    Ok(())
+}
+
+fn upper_align(range_pa: paddr_t, range_len: usize,
+               alloc_len: usize) -> paddr_t {
+    range_pa + range_len - alloc_len
+}
+
+pub fn boot_reserve_range_search(range_pa: paddr_t,
+                                 range_len: usize,
+                                 alloc_len: usize,
+                                 ranges: &Vec<BootReserveRange>,
+                                 alloc_range: &mut BootReserveRange)
+    -> Result<(), ErrNO> {
+
+    dprint!(INFO, "range pa {:x} len {:x} alloc_len {:x}\n",
+            range_pa, range_len, alloc_len);
+
+    let mut alloc_pa = upper_align(range_pa, range_len, alloc_len);
+
+    /* see if it intersects any reserved range */
+    dprint!(INFO, "trying alloc range {:x} len {:x}\n",
+            alloc_pa, alloc_len);
+
+    'retry: loop {
+        for r in ranges {
+            if intersects(r.pa, r.len, alloc_pa, alloc_len) {
+                alloc_pa = r.pa - alloc_len;
+                /* make sure this still works with input constraints */
+                if alloc_pa < range_pa {
+                    return Err(ErrNO::NoMem);
+                }
+
+                continue 'retry;
+            }
+        }
+
+        break;
+    }
+
+    alloc_range.pa = alloc_pa;
+    alloc_range.len = alloc_len;
     Ok(())
 }

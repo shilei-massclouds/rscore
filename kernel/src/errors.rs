@@ -11,6 +11,8 @@ pub enum ErrNO {
 
     //NoDev,
 
+    NoMem,
+
     BadAlign,
     OutOfRange,
 

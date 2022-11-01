@@ -34,7 +34,7 @@ fn process_phys_handoff(ctx: &mut BootContext) -> Result<(), ErrNO> {
 fn boot_reserve_wire() {
 }
 
-fn process_mem_ranges(ctx: &mut BootContext<'_>,
+fn process_mem_ranges(ctx: &mut BootContext,
                       mem_config: Vec<ZBIMemRange>)
     -> Result<(), ErrNO> {
 
@@ -247,13 +247,19 @@ pub fn parse_dtb(ctx: &mut BootContext)
 
 pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
     /* initialize the boot memory reservation system */
-    boot_reserve_init(ctx)?;
+    boot_reserve_init(ctx.kernel_base_phys, ctx.kernel_size,
+                      &mut ctx.reserve_ranges)?;
 
     process_phys_handoff(ctx)?;
 
     /* find memory ranges to use if one is found. */
-    for range in &(ctx.mem_arenas) {
-        pmm_add_arena(&range, &mut (ctx.pmm_node))?;
+    loop {
+        if let Some(a) = ctx.mem_arenas.pop() {
+            pmm_add_arena(a, &mut (ctx.pmm_node),
+                          &(ctx.reserve_ranges))?;
+        } else {
+            break;
+        }
     }
 
     for range in &(ctx.periph_ranges) {
@@ -261,9 +267,10 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
                 range.base_phys, range.base_virt, range.length);
     }
 
+    dprint!(INFO, "platform early init ok!\n");
+
     /* tell the boot allocator to mark ranges we've reserved. */
     boot_reserve_wire();
 
-    dprint!(INFO, "platform early init ok!\n");
     Ok(())
 }

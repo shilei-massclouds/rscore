@@ -47,25 +47,25 @@ use crate::vm::pmm_node::PmmNode;
 use crate::errors::ErrNO;
 use crate::arch::periphmap::{PeriphRange, MAX_PERIPH_RANGES};
 
-pub struct BootContext<'a> {
+pub struct BootContext {
     hartid: usize,
     dtb_pa: paddr_t,
     kernel_base_phys: paddr_t,
     kernel_size: usize,
     reserve_ranges: Vec<BootReserveRange>,
-    mem_arenas: Vec<ArenaInfo<'a>>,
+    mem_arenas: Vec<ArenaInfo>,
     /* peripheral ranges are allocated below the kernel image. */
     periph_ranges: Vec<PeriphRange>,
     periph_base_virt: vaddr_t,
     /* The (currently) one and only pmm node */
-    pmm_node: PmmNode<'a>,
+    pmm_node: PmmNode,
 }
 
-impl<'a> BootContext<'a> {
+impl BootContext {
     pub fn new(hartid: usize,
                dtb_pa: paddr_t,
                kernel_base_phys: paddr_t,
-               kernel_size: usize) -> BootContext<'a> {
+               kernel_size: usize) -> BootContext {
 
         BootContext {
             hartid,

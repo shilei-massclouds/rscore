@@ -31,29 +31,6 @@ fn process_phys_handoff(ctx: &mut BootContext) -> Result<(), ErrNO> {
     process_mem_ranges(ctx, mem_config)
 }
 
-pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
-    /* initialize the boot memory reservation system */
-    boot_reserve_init(ctx)?;
-
-    process_phys_handoff(ctx)?;
-
-    /* find memory ranges to use if one is found. */
-    for range in &(ctx.mem_arenas) {
-        pmm_add_arena(&range);
-    }
-
-    for range in &(ctx.periph_ranges) {
-        dprint!(INFO, "PERIPH: {:x} -> {:x}, {:x}\n",
-                range.base_phys, range.base_virt, range.length);
-    }
-
-    /* tell the boot allocator to mark ranges we've reserved. */
-    boot_reserve_wire();
-
-    dprint!(INFO, "platform early init ok!\n");
-    Ok(())
-}
-
 fn boot_reserve_wire() {
 }
 
@@ -266,4 +243,27 @@ pub fn parse_dtb(ctx: &mut BootContext)
     let dt = early_init_dt_load(dtb_va)?;
 
     early_init_dt_scan(&dt)
+}
+
+pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
+    /* initialize the boot memory reservation system */
+    boot_reserve_init(ctx)?;
+
+    process_phys_handoff(ctx)?;
+
+    /* find memory ranges to use if one is found. */
+    for range in &(ctx.mem_arenas) {
+        pmm_add_arena(&range, &mut (ctx.pmm_node))?;
+    }
+
+    for range in &(ctx.periph_ranges) {
+        dprint!(INFO, "PERIPH: {:x} -> {:x}, {:x}\n",
+                range.base_phys, range.base_virt, range.length);
+    }
+
+    /* tell the boot allocator to mark ranges we've reserved. */
+    boot_reserve_wire();
+
+    dprint!(INFO, "platform early init ok!\n");
+    Ok(())
 }

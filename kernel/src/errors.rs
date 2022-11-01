@@ -14,6 +14,8 @@ pub enum ErrNO {
     BadAlign,
     OutOfRange,
 
+    LackBuf,
+
     NoDTB,
     BadDTB,
 

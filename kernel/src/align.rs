@@ -25,6 +25,11 @@ macro_rules! PAGE_ALIGN {
 }
 
 #[macro_export]
+macro_rules! ROUNDUP_PAGE_SIZE {
+    ($x: expr) => {ROUNDUP!($x, PAGE_SIZE)}
+}
+
+#[macro_export]
 macro_rules! IS_PAGE_ALIGNED {
     ($x: expr) => {IS_ALIGNED!($x, PAGE_SIZE)}
 }

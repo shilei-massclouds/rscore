@@ -4,17 +4,18 @@
  * at https://opensource.org/licenses/MIT
  */
 
-use crate::{dprint, INFO};
+use crate::{
+    dprint, INFO, PmmNode, ErrNO,
+};
 
 /* all of the configured memory arenas */
 pub const MAX_ARENAS: usize = 16;
 
-#[derive(Copy, Clone)]
 pub struct ArenaInfo<'a> {
-    name: &'a str,
-    flags: u32,
-    base: usize,
-    size: usize,
+    pub name: &'a str,
+    pub flags: u32,
+    pub base: usize,
+    pub size: usize,
 }
 
 impl<'a> ArenaInfo<'a> {
@@ -27,8 +28,10 @@ impl<'a> ArenaInfo<'a> {
     }
 }
 
-pub fn pmm_add_arena(info: &ArenaInfo) {
+pub fn pmm_add_arena(info: &ArenaInfo, pmm_node: &mut PmmNode)
+    -> Result<(), ErrNO> {
+
     dprint!(INFO, "Arena.{}: flags[{:x}] {:x} {:x}\n",
             info.name, info.flags, info.base, info.size);
-    //pmm_node..AddArena(info);
+    pmm_node.add_arena(info)
 }

@@ -33,6 +33,7 @@ mod platform;
 
 extern crate alloc;
 
+use types::*;
 use core::sync::atomic::AtomicI32;
 use crate::arch::sbi::*;
 use crate::arch::defines::*;
@@ -42,9 +43,9 @@ use crate::lib::debuglog::debuglog::*;
 use alloc::vec::Vec;
 use crate::vm::bootreserve::{MAX_RESERVES, BootReserveRange};
 use crate::vm::pmm::{MAX_ARENAS, ArenaInfo};
+use crate::vm::pmm_node::PmmNode;
 use crate::errors::ErrNO;
 use crate::arch::periphmap::{PeriphRange, MAX_PERIPH_RANGES};
-use types::*;
 
 pub struct BootContext<'a> {
     hartid: usize,
@@ -56,6 +57,8 @@ pub struct BootContext<'a> {
     /* peripheral ranges are allocated below the kernel image. */
     periph_ranges: Vec<PeriphRange>,
     periph_base_virt: vaddr_t,
+    /* The (currently) one and only pmm node */
+    pmm_node: PmmNode<'a>,
 }
 
 impl<'a> BootContext<'a> {
@@ -76,6 +79,7 @@ impl<'a> BootContext<'a> {
             periph_ranges:
                 Vec::<PeriphRange>::with_capacity(MAX_PERIPH_RANGES),
             periph_base_virt: 0,
+            pmm_node: PmmNode::new(),
         }
     }
 

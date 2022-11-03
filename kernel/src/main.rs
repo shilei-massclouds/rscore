@@ -53,7 +53,6 @@ pub struct BootContext {
     kernel_base_phys: paddr_t,
     kernel_size: usize,
     reserve_ranges: Vec<BootReserveRange>,
-    mem_arenas: Vec<ArenaInfo>,
     /* peripheral ranges are allocated below the kernel image. */
     periph_ranges: Vec<PeriphRange>,
     periph_base_virt: vaddr_t,
@@ -74,8 +73,6 @@ impl BootContext {
             kernel_size,
             reserve_ranges:
                 Vec::<BootReserveRange>::with_capacity(MAX_RESERVES),
-            mem_arenas:
-                Vec::<ArenaInfo>::with_capacity(MAX_ARENAS),
             periph_ranges:
                 Vec::<PeriphRange>::with_capacity(MAX_PERIPH_RANGES),
             periph_base_virt: 0,

@@ -22,7 +22,9 @@ type ZBIMemRangeVec = Vec<ZBIMemRange>;
 const OF_ROOT_NODE_SIZE_CELLS_DEFAULT: u32 = 1;
 const OF_ROOT_NODE_ADDR_CELLS_DEFAULT: u32 = 1;
 
-fn process_phys_handoff(ctx: &mut BootContext) -> Result<(), ErrNO> {
+fn process_phys_handoff(ctx: &mut BootContext)
+    -> Result<Vec<ArenaInfo>, ErrNO> {
+
     /* discover memory ranges */
     let mut mem_config = parse_dtb(ctx)?;
 
@@ -36,7 +38,9 @@ fn boot_reserve_wire() {
 
 fn process_mem_ranges(ctx: &mut BootContext,
                       mem_config: Vec<ZBIMemRange>)
-    -> Result<(), ErrNO> {
+    -> Result<Vec<ArenaInfo>, ErrNO> {
+
+    let mut mem_arenas = Vec::<ArenaInfo>::with_capacity(MAX_ARENAS);
 
     for range in mem_config {
         match &(range.mtype) {
@@ -44,13 +48,13 @@ fn process_mem_ranges(ctx: &mut BootContext,
                 dprint!(INFO, "ZBI: mem arena {:x} - {:x}\n",
                         range.paddr, range.length);
 
-                if ctx.mem_arenas.len() >= MAX_ARENAS {
+                if mem_arenas.len() >= MAX_ARENAS {
                     dprint!(CRITICAL,
                             "ZBI: too many memory arenas,
                              dropping additional\n");
                     break;
                 }
-                ctx.mem_arenas.push(
+                mem_arenas.push(
                     ArenaInfo::new("ram", 0, range.paddr, range.length)
                 );
             },
@@ -66,7 +70,7 @@ fn process_mem_ranges(ctx: &mut BootContext,
         }
     }
 
-    Ok(())
+    Ok(mem_arenas)
 }
 
 fn init_mem_config_arch(config: &mut Vec<ZBIMemRange>) {
@@ -250,11 +254,11 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
     boot_reserve_init(ctx.kernel_base_phys, ctx.kernel_size,
                       &mut ctx.reserve_ranges)?;
 
-    process_phys_handoff(ctx)?;
+    let mut mem_arenas = process_phys_handoff(ctx)?;
 
     /* find memory ranges to use if one is found. */
     loop {
-        if let Some(a) = ctx.mem_arenas.pop() {
+        if let Some(a) = mem_arenas.pop() {
             pmm_add_arena(a, &mut (ctx.pmm_node),
                           &(ctx.reserve_ranges))?;
         } else {

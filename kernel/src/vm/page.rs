@@ -7,12 +7,13 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 
-use crate::paddr_t;
-use crate::vm::vm_page_state;
-use core::sync::atomic::Ordering;
-use crate::lib::list::ListNode;
-use core::sync::atomic::AtomicU8;
 use core::ptr::NonNull;
+use core::sync::atomic::{AtomicU8, Ordering};
+
+use crate::paddr_t;
+use crate::lib::list::ListNode;
+use crate::vm::vm_page_state;
+use crate::vm::vm_page_state::vm_page_state_t;
 
 pub trait linked {
     fn into_node(&mut self) -> &mut ListNode;
@@ -70,6 +71,16 @@ impl vm_page {
 
     pub fn paddr(&self) -> paddr_t {
         self.paddr_
+    }
+
+    pub fn add_to_initial_count(state: vm_page_state_t, n: usize) {
+        /*
+        percpu::WithCurrentPreemptDisable(
+            [&state, &n](percpu* p) {
+                p->vm_page_counts.by_state[VmPageStateIndex(state)] +=
+                    n;
+        });
+        */
     }
 }
 

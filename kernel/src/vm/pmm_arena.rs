@@ -11,7 +11,7 @@ use crate::{
     PAGE_SIZE, ROUNDUP_PAGE_SIZE, ROUNDUP, PAGE_ALIGN, ALIGN,
     BootReserveRange, paddr_t,
 };
-use crate::vm::page::vm_page_t;
+use crate::vm::page::{vm_page_t, vm_page};
 use crate::vm::vm_page_state;
 use crate::vm::vm_page_state::vm_page_state_t;
 use crate::vm::physmap::paddr_to_physmap;
@@ -140,9 +140,7 @@ impl PmmArena {
         self.page_array_.init(page_array_va, page_array_size);
 
         /* |page_count| pages in the state FREE */
-        /*
         vm_page::add_to_initial_count(vm_page_state::FREE, page_count);
-        */
 
         /* compute the range of the array that backs the array itself */
         let array_start_index =

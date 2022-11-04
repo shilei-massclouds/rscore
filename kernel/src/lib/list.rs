@@ -24,11 +24,25 @@ impl ListNode {
     pub fn new() -> Self {
         ListNode {next: None, prev: None}
     }
+
+    pub fn delete_from_list(&mut self) {
+        if self.prev.is_none() || self.next.is_none() {
+            return;
+        }
+
+        if let Some(next) = self.next {
+            unsafe {(*next.as_ptr()).prev = self.prev.take();}
+        }
+
+        if let Some(prev) = self.prev {
+            unsafe {(*prev.as_ptr()).next = self.next.take();}
+        }
+    }
 }
 
 pub struct List<T: linked> {
-    head: Option<NonNull<ListNode>>,
-    tail: Option<NonNull<ListNode>>,
+    node: ListNode,
+    ref_node: Option<NonNull<ListNode>>,    /* ref to node */
     len: usize,
     marker: PhantomData<NonNull<T>>,
 }
@@ -37,73 +51,84 @@ impl<T: linked> List<T> {
     /* Creates an empty `LinkedList`. */
     #[inline]
     #[must_use]
-    pub const fn new() -> Self {
-        List {
-            head: None, tail: None, len: 0,
+    pub fn new() -> Self {
+        let mut list = List {
+            node: ListNode::new(),
+            ref_node: None,
+            len: 0,
             marker: PhantomData
-        }
+        };
+
+        //list.node = NonNull::new(&mut list._node as *mut ListNode);
+        list.ref_node = NonNull::new(&mut list.node);
+        list.node.next = list.ref_node;
+        list.node.prev = list.ref_node;
+
+        /*
+        let node = NonNull::new(&mut list.node as *mut ListNode);
+        list.node.next = node;
+        list.node.prev = node;
+        */
+
+        list
     }
 
-    /* Adds the given node to the back of the list. */
+    /* Adds the given node to the tail of the list. */
     #[inline]
-    fn push_back_node(&mut self, node: &mut ListNode) {
-        unsafe {
-            node.next = None;
-            node.prev = self.tail;
-            let node = Some(node.into());
+    fn add_tail_node(&mut self, node: &mut ListNode) {
+        node.prev = self.node.prev;
+        node.next = self.ref_node;
+        let node = Some(node.into());
 
-            match self.tail {
-                None => self.head = node,
-                Some(tail) => (*tail.as_ptr()).next = node,
-            }
-
-            self.tail = node;
-            self.len += 1;
+        if let Some(prev) = self.node.prev {
+            unsafe {(*prev.as_ptr()).next = node;}
         }
+        self.node.prev = node;
+
+        self.len += 1;
     }
 
-    pub fn push_back(&mut self, mut elt: NonNull<T>) {
-        unsafe { self.push_back_node(elt.as_mut().into_node()); }
+    pub fn add_tail(&mut self, mut elt: NonNull<T>) {
+        unsafe {self.add_tail_node(elt.as_mut().into_node());}
     }
 
     /* Removes and returns the node at the back of the list. */
     #[inline]
-    fn pop_back_node(&mut self) -> Option<NonNull<ListNode>> {
-        self.tail.map(|node| unsafe {
-            let ptr = node.as_ptr();
-            self.tail = (*ptr).prev;
+    fn remove_tail_node(&mut self) -> Option<NonNull<ListNode>> {
+        if self.node.prev == self.ref_node {
+            return None;
+        }
 
-            match self.tail {
-                None => self.head = None,
-                Some(tail) => (*tail.as_ptr()).next = None,
-            }
-
-            self.len -= 1;
-            node
-        })
+        let node = self.node.prev;
+        if let Some(mut prev) = self.node.prev {
+            unsafe {prev.as_mut().delete_from_list();}
+        }
+        self.len -= 1;
+        node
     }
 
-    pub fn pop_back(&mut self) -> Option<NonNull<T>> {
-        T::from_node(self.pop_back_node()?)
+    pub fn remove_tail(&mut self) -> Option<NonNull<T>> {
+        T::from_node(self.remove_tail_node()?)
     }
 
     pub fn append(&mut self, other: &mut Self) {
-        match self.tail {
-            None => mem::swap(self, other),
-            Some(mut tail) => {
-                /* `as_mut` is okay here because we have
-                 * exclusive access to the entirety of both lists. */
-                if let Some(mut other_head) = other.head.take() {
-                    unsafe {
-                        tail.as_mut().next = Some(other_head);
-                        other_head.as_mut().prev = Some(tail);
-                    }
-
-                    self.tail = other.tail.take();
-                    self.len += mem::replace(&mut other.len, 0);
-                }
-            }
+        if other.node.prev == other.ref_node {
+            return;
         }
+
+        if let Some(next) = other.node.next {
+            unsafe {(*next.as_ptr()).prev = self.node.prev;}
+        }
+        if let Some(prev) = other.node.prev {
+            unsafe {(*prev.as_ptr()).next = self.ref_node;}
+        }
+
+        if let Some(prev) = self.node.prev {
+            unsafe {(*prev.as_ptr()).next = other.node.next.take();}
+        }
+        self.node.prev = other.node.prev.take();
+
+        self.len += mem::replace(&mut other.len, 0);
     }
 
     pub fn len(&self) -> usize {

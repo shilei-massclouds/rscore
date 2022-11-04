@@ -50,8 +50,6 @@ use crate::arch::periphmap::{PeriphRange, MAX_PERIPH_RANGES};
 pub struct BootContext {
     hartid: usize,
     dtb_pa: paddr_t,
-    kernel_base_phys: paddr_t,
-    kernel_size: usize,
     reserve_ranges: Vec<BootReserveRange>,
     /* peripheral ranges are allocated below the kernel image. */
     periph_ranges: Vec<PeriphRange>,
@@ -61,16 +59,10 @@ pub struct BootContext {
 }
 
 impl BootContext {
-    pub fn new(hartid: usize,
-               dtb_pa: paddr_t,
-               kernel_base_phys: paddr_t,
-               kernel_size: usize) -> BootContext {
-
+    pub fn new(hartid: usize, dtb_pa: paddr_t) -> BootContext {
         BootContext {
             hartid,
             dtb_pa,
-            kernel_base_phys,
-            kernel_size,
             reserve_ranges:
                 Vec::<BootReserveRange>::with_capacity(MAX_RESERVES),
             periph_ranges:
@@ -80,19 +72,26 @@ impl BootContext {
         }
     }
 
+    /*
     fn _kernel_pa_to_va(&self, pa: usize) -> usize {
-        pa + (KERNEL_BASE - self.kernel_base_phys)
+        pa + (KERNEL_BASE - KERNEL_BASE_PHYS)
     }
+    */
 }
 
 static HART_LOTTERY: AtomicI32 = AtomicI32::new(0);
 
+fn kernel_base_phys() -> usize {
+    unsafe { __kernel_base_phys }
+}
+
+fn kernel_size() -> usize {
+    (_end as usize) - (__code_start as usize)
+}
+
 /* called from arch code */
-fn lk_main(hartid: usize, dtb_pa: paddr_t,
-           kernel_base_phys: paddr_t, kernel_size: usize)
-    -> Result<(), ErrNO> {
-    let mut ctx = BootContext::new(hartid, dtb_pa,
-                                   kernel_base_phys, kernel_size);
+fn lk_main(hartid: usize, dtb_pa: paddr_t) -> Result<(), ErrNO> {
+    let mut ctx = BootContext::new(hartid, dtb_pa);
 
     /* get us into some sort of thread context so Thread::Current works. */
     //thread_init_early();
@@ -107,7 +106,7 @@ fn lk_main(hartid: usize, dtb_pa: paddr_t,
     dprint!(ALWAYS, "printing enabled\n");
 
     dprint!(ALWAYS, "params [{:x}, {:x}] dtb_phys: {:x} ... \n",
-            kernel_base_phys, kernel_size, ctx.dtb_pa);
+            kernel_base_phys(), kernel_size(), ctx.dtb_pa);
     platform_early_init(&mut ctx)?;
 
     Ok(())

@@ -82,4 +82,5 @@ extern "C" {
     pub fn __code_start();
     pub fn __bss_start();
     pub fn _end();
+    pub static __kernel_base_phys: usize;
 }

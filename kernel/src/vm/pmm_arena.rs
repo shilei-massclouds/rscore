@@ -174,7 +174,7 @@ impl PmmArena {
                 let page = self.page_array_.get_page(i)
                     .ok_or_else(|| ErrNO::NoMem)?;
 
-                list.push_back(page);
+                list.add_tail(page);
             }
             i += 1;
         }
@@ -182,5 +182,20 @@ impl PmmArena {
         pmm_node.add_free_pages(&mut list);
         dprint!(INFO, "init page_array ok!\n");
         Ok(())
+    }
+
+    pub fn address_in_arena(&self, pa: paddr_t) -> bool {
+        pa >= self.base() && pa <= self.base() + self.size() - 1
+    }
+
+    pub fn find_specific(&self, pa: paddr_t)
+        -> Option<NonNull<vm_page_t>> {
+
+        if !self.address_in_arena(pa) {
+            return None;
+        }
+
+        let index = (pa - self.base()) / PAGE_SIZE;
+        self.page_array_.get_page(index)
     }
 }

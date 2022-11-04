@@ -5,15 +5,16 @@
  */
 
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 use super::pmm_arena::PmmArena;
 use crate::MAX_ARENAS;
 use crate::{
-    ArenaInfo, dprint, INFO, CRITICAL, BootReserveRange,
-    PAGE_SIZE, IS_ALIGNED, IS_PAGE_ALIGNED, ErrNO,
+    ArenaInfo, dprint, INFO, CRITICAL, BootReserveRange, paddr_t,
+    PAGE_SIZE, IS_ALIGNED, IS_PAGE_ALIGNED, ErrNO, ROUNDDOWN,
 };
 use crate::lib::list::List;
 use crate::vm::page::vm_page_t;
-use core::sync::atomic::{AtomicU64, Ordering};
+use crate::vm::page::linked;
 
 /* per numa node collection of pmm arenas and worker threads */
 pub struct PmmNode {
@@ -81,5 +82,63 @@ impl PmmNode {
 
         dprint!(INFO, "free count now {}\n",
                 self.free_count.load(Ordering::Relaxed));
+    }
+
+    pub fn alloc_range(&self, paddr: paddr_t, count: usize,
+                       list: &mut List<vm_page_t>)
+        -> Result<(), ErrNO> {
+        dprint!(INFO, "address {:x}, count {}\n", paddr, count);
+
+        if count == 0 {
+            return Ok(());
+        }
+
+        let mut paddr = ROUNDDOWN!(paddr, PAGE_SIZE);
+
+        let mut allocated = 0;
+
+        //AutoPreemptDisabler preempt_disable;
+        //Guard<Mutex> guard{&lock_};
+
+        /* walk through the arenas,
+         * looking to see if the physical page belongs to it */
+        'next: for a in &(self.arenas) {
+            while allocated < count {
+                if !a.address_in_arena(paddr) {
+                    continue 'next;
+                }
+
+                if let Some(mut page) = a.find_specific(paddr) {
+                    /* And we never allocate loaned pages
+                     * for caller of AllocRange() */
+                    unsafe {
+                        if page.as_ref().is_free() &&
+                           !page.as_ref().is_loaned() {
+                            page.as_mut().delete_from_list();
+                            //AllocPageHelperLocked(page);
+                            list.add_tail(page);
+                            allocated += 1;
+                            //DecrementFreeCountLocked(1);
+                        }
+                    }
+                }
+
+                paddr += PAGE_SIZE;
+            }
+
+            if allocated >= count {
+                break;
+            }
+        }
+
+        if allocated != count {
+            /* we were not able to allocate the entire run,
+             * free these pages */
+            //FreeListLocked(list);
+            return Err(ErrNO::NotFound);
+        }
+
+        dprint!(INFO, "########## alloc range ok!\n");
+        Ok(())
     }
 }

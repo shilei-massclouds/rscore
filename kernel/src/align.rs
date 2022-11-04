@@ -10,6 +10,11 @@ macro_rules! ROUNDUP {
 }
 
 #[macro_export]
+macro_rules! ROUNDDOWN {
+    ($a: expr, $b: expr) => {(($a) & !(($b)-1))}
+}
+
+#[macro_export]
 macro_rules! ALIGN {
     ($a: expr, $b: expr) => {ROUNDUP!($a, $b)}
 }

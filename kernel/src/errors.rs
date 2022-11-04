@@ -9,6 +9,8 @@ pub enum ErrNO {
     /* Indicates an operation was successful. */
     _OK,
 
+    NotFound,
+
     //NoDev,
 
     NoMem,

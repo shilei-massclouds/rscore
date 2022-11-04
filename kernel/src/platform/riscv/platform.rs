@@ -4,18 +4,24 @@
  * at https://opensource.org/licenses/MIT
  */
 
+use core::slice;
 use crate::{
     BootContext, dprint, CRITICAL, INFO, WARN,
+    PAGE_SIZE, ROUNDUP_PAGE_SIZE,
+    kernel_base_phys, kernel_size,
 };
 use crate::errors::ErrNO;
 use crate::vm::bootreserve::boot_reserve_init;
 use crate::vm::physmap::paddr_to_physmap;
-use crate::vm::pmm::{MAX_ARENAS, ArenaInfo, pmm_add_arena};
-use core::slice;
+use crate::vm::pmm::{
+    MAX_ARENAS, ArenaInfo, pmm_add_arena, pmm_alloc_range,
+};
+use crate::vm::page::vm_page_t;
 use alloc::vec::Vec;
 use device_tree::DeviceTree;
 use crate::boot::image::*;
 use crate::arch::periphmap::add_periph_range;
+use crate::lib::list::List;
 
 type ZBIMemRangeVec = Vec<ZBIMemRange>;
 
@@ -33,7 +39,35 @@ fn process_phys_handoff(ctx: &mut BootContext)
     process_mem_ranges(ctx, mem_config)
 }
 
-fn boot_reserve_wire() {
+fn boot_reserve_wire(ctx: &mut BootContext) -> Result<(), ErrNO> {
+    for r in &(ctx.reserve_ranges) {
+        dprint!(INFO, "PMM: boot reserve marking WIRED [{:x}, {:x}]\n",
+                r.pa, r.pa + r.len - 1);
+
+        let pages = ROUNDUP_PAGE_SIZE!(r.len) / PAGE_SIZE;
+        let mut alloc_page_list = List::<vm_page_t>::new();
+        pmm_alloc_range(r.pa, pages,
+                        &mut ctx.pmm_node,
+                        &mut alloc_page_list)?;
+    }
+
+    Ok(())
+
+    /*
+    if (list_is_empty(&reserved_page_list)) {
+      list_move(&alloc_page_list, &reserved_page_list);
+    } else {
+      list_splice_after(&alloc_page_list, list_peek_tail(&reserved_page_list));
+    }
+  */
+
+  // mark all of the pages we allocated as WIRED
+    /*
+  vm_page_t* p;
+  list_for_every_entry (&reserved_page_list, p, vm_page_t, queue_node) {
+    p->set_state(vm_page_state::WIRED);
+  }
+  */
 }
 
 fn process_mem_ranges(ctx: &mut BootContext,
@@ -249,9 +283,10 @@ pub fn parse_dtb(ctx: &mut BootContext)
     early_init_dt_scan(&dt)
 }
 
-pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
+pub fn platform_early_init(ctx: &mut BootContext)
+    -> Result<(), ErrNO> {
     /* initialize the boot memory reservation system */
-    boot_reserve_init(ctx.kernel_base_phys, ctx.kernel_size,
+    boot_reserve_init(kernel_base_phys(), kernel_size(),
                       &mut ctx.reserve_ranges)?;
 
     let mut mem_arenas = process_phys_handoff(ctx)?;
@@ -274,7 +309,5 @@ pub fn platform_early_init(ctx: &mut BootContext) -> Result<(), ErrNO> {
     dprint!(INFO, "platform early init ok!\n");
 
     /* tell the boot allocator to mark ranges we've reserved. */
-    boot_reserve_wire();
-
-    Ok(())
+    boot_reserve_wire(ctx)
 }

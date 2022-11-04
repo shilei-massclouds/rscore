@@ -36,6 +36,13 @@ SECTIONS
                ".init_array overalignment -> maybe padding gaps");
     }
 
+    .init.data : {
+        . = ALIGN(8);
+        PROVIDE_HIDDEN(__kernel_base_phys = .);
+        . += 8;
+        *(.init.data init.data.*)
+    }
+
     .rodata : {
         *(.rodata) *(.rodata.*)
     }

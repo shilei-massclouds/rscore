@@ -12,7 +12,7 @@ use super::mmu::{
     SWAPPER_SATP,
     PAGE_KERNEL, PAGE_KERNEL_EXEC
 };
-use crate::lk_main;
+use crate::{lk_main, HART_LOTTERY};
 use crate::config_generated::*;
 
 #[link_section = ".bss..page_aligned"]
@@ -63,6 +63,11 @@ fn _start() -> ! {
         "mv s0, a0
          mv s1, a1",
 
+        /* Save kernel physical base address */
+        "la a3, __kernel_base_phys
+         la a2, __code_start
+         sd a2, (a3)",
+
         /* Clear BSS for flat non-ELF images */
         "la a3, __bss_start
          la a4, _end
@@ -94,7 +99,7 @@ fn _start() -> ! {
 
         NR_CPUS = const NR_CPUS,
         SR_FS = const SR_FS,
-        HART_LOTTERY = sym crate::HART_LOTTERY,
+        HART_LOTTERY = sym HART_LOTTERY,
         stack_size = const _CONFIG_STACK_SIZE,
         boot_stack = sym BOOT_STACK,
         start_kernel = sym start_kernel,
@@ -186,7 +191,6 @@ fn start_kernel(hartid: usize, dtb_pa: usize) {
         return;
     }
 
-    /* Symbol __code_start and _end comes from kernel.ld */
     let kernel_base_phys = __code_start as usize;
     let kernel_size = (_end as usize) - kernel_base_phys;
 
@@ -209,7 +213,7 @@ fn start_kernel(hartid: usize, dtb_pa: usize) {
     /* Set the per cpu pointer for cpu 0 */
 
     /* Enter main */
-    let ret = lk_main(hartid, dtb_pa, kernel_base_phys, kernel_size);
+    let ret = lk_main(hartid, dtb_pa);
     if let Err(errno) = ret {
         crate::dprint!(crate::CRITICAL, "Fatal: errno = {:?}\n", errno);
         /* Todo: panic */

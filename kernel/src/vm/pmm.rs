@@ -5,10 +5,12 @@
  */
 
 use crate::{
-    dprint, INFO, PmmNode, ErrNO, BootReserveRange,
+    dprint, INFO, PmmNode, ErrNO, BootReserveRange, paddr_t,
 };
 use alloc::vec::Vec;
 use alloc::string::String;
+use crate::lib::list::List;
+use crate::vm::page::vm_page_t;
 
 /* all of the configured memory arenas */
 pub const MAX_ARENAS: usize = 16;
@@ -38,4 +40,12 @@ pub fn pmm_add_arena(info: ArenaInfo, pmm_node: &mut PmmNode,
     dprint!(INFO, "Arena.{}: flags[{:x}] {:x} {:x}\n",
             info.name, info.flags, info.base, info.size);
     pmm_node.add_arena(info, reserve_ranges)
+}
+
+pub fn pmm_alloc_range(paddr: paddr_t, count: usize,
+                       pmm_node: &mut PmmNode,
+                       list: &mut List<vm_page_t>)
+    -> Result<(), ErrNO> {
+
+    pmm_node.alloc_range(paddr, count, list)
 }

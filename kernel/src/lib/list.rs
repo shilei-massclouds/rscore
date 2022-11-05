@@ -13,7 +13,13 @@
 use core::mem;
 use core::ptr::NonNull;
 use core::marker::PhantomData;
-use crate::vm::page::linked;
+
+pub trait Linked {
+    fn from_node(ptr: NonNull<ListNode>) -> Option<NonNull<Self>>;
+    fn into_node(&mut self) -> &mut ListNode;
+
+    fn delete_from_list(&mut self);
+}
 
 pub struct ListNode {
     next: Option<NonNull<ListNode>>,
@@ -40,14 +46,14 @@ impl ListNode {
     }
 }
 
-pub struct List<T: linked> {
+pub struct List<T: Linked> {
     node: ListNode,
     ref_node: Option<NonNull<ListNode>>,    /* ref to node */
     len: usize,
     marker: PhantomData<NonNull<T>>,
 }
 
-impl<T: linked> List<T> {
+impl<T: Linked> List<T> {
     /* Creates an empty `LinkedList`. */
     #[inline]
     #[must_use]

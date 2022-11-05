@@ -11,19 +11,12 @@ use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use crate::paddr_t;
-use crate::lib::list::ListNode;
+use crate::lib::list::{ListNode, Linked};
 use crate::vm::vm_page_state;
 use crate::vm::vm_page_state::vm_page_state_t;
 
 const IsLoaned:         u8 = 1;
 const IsLoanCancelled:  u8 = 2;
-
-pub trait linked {
-    fn from_node(ptr: NonNull<ListNode>) -> Option<NonNull<Self>>;
-    fn into_node(&mut self) -> &mut ListNode;
-
-    fn delete_from_list(&mut self);
-}
 
 pub struct vm_page {
     /* linked node */
@@ -43,7 +36,7 @@ pub struct vm_page {
     loaned_state_: AtomicU8,
 }
 
-impl linked for vm_page {
+impl Linked for vm_page {
     fn from_node(ptr: NonNull<ListNode>) -> Option<NonNull<Self>> {
         NonNull::<vm_page_t>::new(ptr.as_ptr() as *mut Self)
     }

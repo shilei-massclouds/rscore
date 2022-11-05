@@ -46,6 +46,9 @@ use crate::vm::pmm::{MAX_ARENAS, ArenaInfo};
 use crate::vm::pmm_node::PmmNode;
 use crate::errors::ErrNO;
 use crate::arch::periphmap::{PeriphRange, MAX_PERIPH_RANGES};
+use crate::vm::vm::vm_init_preheap;
+use crate::vm::vm_aspace::VmAspace;
+use crate::lib::list::List;
 
 pub struct BootContext {
     hartid: usize,
@@ -56,6 +59,7 @@ pub struct BootContext {
     periph_base_virt: vaddr_t,
     /* The (currently) one and only pmm node */
     pmm_node: PmmNode,
+    aspaces: List<VmAspace>,
 }
 
 impl BootContext {
@@ -69,6 +73,7 @@ impl BootContext {
                 Vec::<PeriphRange>::with_capacity(MAX_PERIPH_RANGES),
             periph_base_virt: 0,
             pmm_node: PmmNode::new(),
+            aspaces: List::<VmAspace>::new(),
         }
     }
 
@@ -108,6 +113,32 @@ fn lk_main(hartid: usize, dtb_pa: paddr_t) -> Result<(), ErrNO> {
     dprint!(ALWAYS, "params [{:x}, {:x}] dtb_phys: {:x} ... \n",
             kernel_base_phys(), kernel_size(), ctx.dtb_pa);
     platform_early_init(&mut ctx)?;
+
+    // DriverHandoffEarly(*gPhysHandoff);
+    // lk_primary_cpu_init_level(LK_INIT_LEVEL_PLATFORM_EARLY,
+    //                           LK_INIT_LEVEL_ARCH_PREVM - 1);
+
+    /* At this point, the kernel command line and serial are set up. */
+
+    dprint!(INFO, "\nwelcome to rscon\n\n");
+    dprint!(SPEW, "KASLR: .text section at 0x{:x}\n", kernel_base_phys());
+
+    /* Perform any additional arch and platform-specific set up
+     * that needs to be done before virtual memory or the heap are set up. */
+    dprint!(SPEW, "initializing arch pre-vm\n");
+    // arch_prevm_init();
+    // lk_primary_cpu_init_level(LK_INIT_LEVEL_ARCH_PREVM,
+    //                           LK_INIT_LEVEL_PLATFORM_PREVM - 1);
+    dprint!(SPEW, "initializing platform pre-vm\n");
+    // platform_prevm_init();
+    // lk_primary_cpu_init_level(LK_INIT_LEVEL_PLATFORM_PREVM,
+    //                           LK_INIT_LEVEL_VM_PREHEAP - 1);
+
+    /* perform basic virtual memory setup */
+    dprint!(SPEW, "initializing vm pre-heap\n");
+    vm_init_preheap();
+    // lk_primary_cpu_init_level(LK_INIT_LEVEL_VM_PREHEAP,
+    //                           LK_INIT_LEVEL_HEAP - 1);
 
     Ok(())
 }

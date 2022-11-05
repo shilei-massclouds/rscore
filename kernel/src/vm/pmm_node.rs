@@ -12,9 +12,8 @@ use crate::{
     ArenaInfo, dprint, INFO, CRITICAL, BootReserveRange, paddr_t,
     PAGE_SIZE, IS_ALIGNED, IS_PAGE_ALIGNED, ErrNO, ROUNDDOWN,
 };
-use crate::lib::list::List;
+use crate::lib::list::{List, Linked};
 use crate::vm::page::vm_page_t;
-use crate::vm::page::linked;
 
 /* per numa node collection of pmm arenas and worker threads */
 pub struct PmmNode {

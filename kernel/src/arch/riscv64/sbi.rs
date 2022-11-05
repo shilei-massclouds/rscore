@@ -6,6 +6,8 @@
 
 #![allow(dead_code)]
 
+use core::arch::asm;
+
 /* Legacy Extensions (EIDs 0x00 - 0x0F) */
 const SBI_SET_TIMER         : usize = 0x0;
 const SBI_CONSOLE_PUTCHAR   : usize = 0x1;
@@ -25,7 +27,8 @@ fn sbi_call(eid: usize, fid: usize,
     let ret0;
     let ret1;
     unsafe {
-        core::arch::asm!("ecall",
+        asm!(
+            "ecall",
             in("a0") arg0,
             in("a1") arg1,
             in("a2") arg2,

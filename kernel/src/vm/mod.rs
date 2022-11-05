@@ -5,4 +5,6 @@ pub mod pmm;
 pub mod pmm_node;
 pub mod pmm_arena;
 pub mod page;
+pub mod vm;
 pub mod vm_page_state;
+pub mod vm_aspace;
